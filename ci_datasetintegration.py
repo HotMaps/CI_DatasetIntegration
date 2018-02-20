@@ -36,7 +36,7 @@ sudo docker rm postgis-database
 sudo docker run \
         --name=postgis-database \
         -e POSTGRES_USER=hotmaps \
-        -e POSTGRES_PASSWORD=PASSWORD \
+        -e POSTGRES_PASSWORD=***REMOVED*** \
         -e POSTGRES_DB=toolboxdb \
         -e PGDATA=/var/lib/postgresql/data \
         -p 32768:5432 \
@@ -150,7 +150,7 @@ class DB(object):
 #g.pull()
 
 # connect to database
-db = DB(conn_string="host='localhost' port='32768' dbname='toolboxdb' user='hotmaps' password='PASSWORD'")
+db = DB(conn_string="host='localhost' port='32768' dbname='toolboxdb' user='hotmaps' password='***REMOVED***'")
 
 # read datapackage.json (dp)
 try:
@@ -233,7 +233,7 @@ try:
             os.environ['PGHOST'] = 'localhost'
             os.environ['PGPORT'] = '32768'
             os.environ['PGUSER'] = 'hotmaps'
-            os.environ['PGPASSWORD'] = 'PASSWORD'
+            os.environ['PGPASSWORD'] = '***REMOVED***'
             os.environ['PGDATABASE'] = 'toolboxdb'
 
             cmds = 'cd git-repos/' + repository_name + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + stat_schema + '.' + name + ' | psql'
