@@ -10,9 +10,11 @@ import traceback
 import logging
 import subprocess
 import csv
-import datetime
+import ci_secrets.ci_secrets
 
 # schemas
+from ci_secrets.secrets import DB_password
+
 stat_schema = 'public'  # 'stat' on production/dev database
 geo_schema = 'public'  # 'geo' on production/dev database
 
@@ -233,7 +235,7 @@ try:
             os.environ['PGHOST'] = 'localhost'
             os.environ['PGPORT'] = '32768'
             os.environ['PGUSER'] = 'hotmaps'
-            os.environ['PGPASSWORD'] = 'password'
+            os.environ['PGPASSWORD'] = DB_password
             os.environ['PGDATABASE'] = 'toolboxdb'
 
             cmds = 'cd git-repos/' + repository_name + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + stat_schema + '.' + name + ' | psql'
