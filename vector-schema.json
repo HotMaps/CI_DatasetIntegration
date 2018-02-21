@@ -30,20 +30,14 @@
             ]
         },
         "datapackage_version": {
-            "$id": "/properties/datapackage_version",
-            "type": "array",
-            "minItems": 0,
-            "uniqueItems": false,
-            "items": {
-                "$id": "/properties/datapackage_version/items",
-                "type": "string",
-                "title": "The 0 Schema",
-                "description": "An explanation about the purpose of this instance.",
-                "default": "",
-                "examples": [
-                    "1.0-beta"
-                ]
-            }
+          "$id": "/properties/datapackage_version",
+          "type": ["string", "array"],
+          "title": "The Data Package Version Schema",
+          "description": "An explanation about the purpose of this instance.",
+          "default": "",
+          "examples": [
+            "1.0-beta"
+          ]
         },
         "title": {
             "$id": "/properties/title",
