@@ -10,11 +10,9 @@ import traceback
 import logging
 import subprocess
 import csv
-import ci_secrets.ci_secrets
-
-# schemas
 from ci_secrets.secrets import DB_password
 
+# schemas
 stat_schema = 'public'  # 'stat' on production/dev database
 geo_schema = 'public'  # 'geo' on production/dev database
 
@@ -24,7 +22,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 # git directory
 # g_dir = '/home/hud/hotmaps/ci-datasets/git-repos/HotmapsLAU'
 # g_dir = '/home/hud/hotmaps/ci-datasets/git-repos/pop_tot_curr_density'
-repository_name = 'electricity_emissions_hourly'
+repository_name = 'gfa_nonres_curr_density'
 g_dir = base_path + '/git-repos/' + repository_name
 
 # README
@@ -152,7 +150,7 @@ class DB(object):
 #g.pull()
 
 # connect to database
-db = DB(conn_string="host='localhost' port='32768' dbname='toolboxdb' user='hotmaps' password='password'")
+db = DB(conn_string="host='localhost' port='32768' dbname='toolboxdb' user='hotmaps' password='" + DB_password + "'")
 
 # read datapackage.json (dp)
 try:
@@ -225,11 +223,11 @@ try:
             # import shapefile
             import_shapefile(os.path.join(base_path, 'git-repos', repository_name, path))
 
-        elif gis_data_type == 'raster-package':
+        elif gis_data_type == 'raster-data-resource':
             raster = r['raster']
             proj = raster['epsg']
-            number_of_bands = raster['number_of_bands']
-            band0 = raster['band0']
+            #number_of_bands = raster['number_of_bands']
+            #band0 = raster['band0']
             raster_path = os.path.join(base_path, 'git-repos', repository_name, path)
 
             os.environ['PGHOST'] = 'localhost'
