@@ -26,10 +26,10 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 # g_dir = '/home/hud/hotmaps/ci-datasets/git-repos/pop_tot_curr_density'
 repository_name = 'pop_tot_curr_density'
 #g_dir = base_path + '/git-repos/' + repository_name
-g_dir = '/home/hud/git-repos/' + repository_name
+g_dir = '/home/uadmin/git-repos/' + repository_name
 
 # default lau and nuts shapefiles
-lau_shp = '/home/hud/git-repos/HotmapsLAU/data/HotmapsLAU.shp'
+lau_shp = '/home/uadmin/git-repos/HotmapsLAU/data/HotmapsLAU.shp'
 
 
 def str_with_quotes(obj):
@@ -53,7 +53,7 @@ class DB(object):
             self.conn = psycopg2.connect(conn_string)
         except psycopg2.Error as e:
             print(e)
-            conn.close()
+            self.close_connection()
             sys.exit(1)
 
     def query(self, query, commit=False):
