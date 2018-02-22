@@ -105,7 +105,7 @@ class DB(object):
             self.conn = psycopg2.connect(conn_string)
         except psycopg2.Error as e:
             print(e)
-            conn.close()
+            self.close_connection()
             sys.exit(1)
 
     def query(self, query, commit=False):
