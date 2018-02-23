@@ -1,18 +1,9 @@
 # python 3.5
 import sys
-import git
-import json
-from pprint import pprint
 import os.path
-import psycopg2
-import osgeo.ogr
 import traceback
 import logging
-import subprocess
-import csv
-import datetime
-from rasterstats import zonal_stats, point_query
-from ci_secrets import secrets
+from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user
 from db import db_helper
 
 # schemas
@@ -31,7 +22,7 @@ vector_SRID = "3035"
 raster_SRID = "3035"
 
 # connect to database
-db = db_helper.DB(conn_string="host='hotmaps.hevs.ch' port='32768' dbname='toolboxdb' user='hotmaps' password='" + secrets.DB_password + "'")
+db = db_helper.DB(host=DB_host, port=DB_port, database=DB_database, user=DB_user, password=DB_password)
 
 # read datapackage.json (dp)
 try:
@@ -45,10 +36,12 @@ try:
     attributes_names = ('count', 'sum', 'mean', 'stddev', 'min', 'max', 'comm_id', 'fk_'+lau_table_name+'_gid')
     db.create_table(table_name=prec_tbl,
                     col_names=attributes_names,
-                    col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'varchar(255)', 'bigint'))
+                    col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
+                               'numeric(20,2)', 'varchar(255)', 'bigint'))
 
     query = "SELECT (" \
-                + "SELECT (ST_SummaryStatsAgg(ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
+                + "SELECT (ST_SummaryStatsAgg(ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
+                    vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
                 + "FROM " + rast_tbl + " " \
                 + "WHERE ST_Intersects(" \
                     + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
@@ -58,8 +51,8 @@ try:
             + ";"
 
     db.query(commit=True, query='INSERT INTO ' + prec_tbl
-                                + ' (' + ', '.join(map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
-                                + query)
+        + ' (' + ', '.join(map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
+        + query)
 
     vect_tbl = geo_schema + '.' + nuts_table_name
     prec_tbl = stat_schema + '.' + precomputed_table_name_nuts
@@ -69,10 +62,12 @@ try:
     attributes_names = ('count', 'sum', 'mean', 'stddev', 'min', 'max', 'nuts_id', 'fk_'+nuts_table_name+'_gid')
     db.create_table(table_name=prec_tbl,
                     col_names=attributes_names,
-                    col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'varchar(255)', 'bigint'))
+                    col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
+                               'numeric(20,2)', 'varchar(255)', 'bigint'))
 
     query = "SELECT (" \
-                + "SELECT (ST_SummaryStatsAgg( ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
+                + "SELECT (ST_SummaryStatsAgg( ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
+                    vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
                 + "FROM " + rast_tbl + " " \
                 + "WHERE ST_Intersects(" \
                     + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
@@ -82,8 +77,8 @@ try:
             + ";"
 
     db.query(commit=True, query='INSERT INTO ' + prec_tbl
-                                + ' (' + ', '.join(map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
-                                + query)
+        + ' (' + ', '.join(map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
+        + query)
 
 except Exception as e:
     logging.error(traceback.format_exc())

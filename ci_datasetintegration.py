@@ -10,7 +10,8 @@ import traceback
 import logging
 import subprocess
 import csv
-from ci_secrets.secrets import DB_password
+from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path
+from db import db_helper
 
 # schemas
 stat_schema = 'public'  # 'stat' on production/dev database
@@ -19,11 +20,11 @@ geo_schema = 'public'  # 'geo' on production/dev database
 # current path
 base_path = os.path.dirname(os.path.abspath(__file__))
 
-# git directory
-# g_dir = '/home/hud/hotmaps/ci-datasets/git-repos/HotmapsLAU'
-# g_dir = '/home/hud/hotmaps/ci-datasets/git-repos/pop_tot_curr_density'
-repository_name = 'gfa_nonres_curr_density'
-g_dir = base_path + '/git-repos/' + repository_name
+# git repositories path
+repositories_base_path = GIT_base_path
+repository_name = 'electricity_emissions_hourly'
+git_path = os.path.join(repositories_base_path, repository_name)
+
 
 # README
 # To test this script localy, run the following script before
@@ -44,7 +45,7 @@ sudo docker run \
 """
 
 
-def import_shapefile(src_file):
+def import_shapefile(src_file, date):
     # import shp
     # src_file = os.path.join("git-repos", "HotmapsLAU", "data", "HotmapsLAU.shp")
     shapefile = osgeo.ogr.Open(src_file)
@@ -56,13 +57,6 @@ def import_shapefile(src_file):
         for att in attributes_names:
             values.append(feature.GetField(att))
 
-        # static way of getting feature fields
-        # comm_id = feature.GetField("comm_id")
-        # shape_leng = feature.GetField("shape_leng")
-        # shape_area = feature.GetField("shape_area")
-        # year = feature.GetField("year")
-        # stat_levl_ = feature.GetField("stat_levl")
-        #    name = feature.GetField("NAME").decode("Latin-1")
         geom = feature.GetGeometryRef()
 
         # convert Polygon type to MultiPolygon
@@ -75,86 +69,25 @@ def import_shapefile(src_file):
         # add date from datapackage.json
         values.append(date)
 
-        db.query(commit=True, query='INSERT INTO ' + geo_schema + '.' + table_name \
-                                    + ' (' + ', '.join(
-            map(str_with_quotes, [x.lower() for x in db_attributes_names])) + ')' \
-                                    + ' VALUES ' + '(' + ', '.join(
-            map(str_with_single_quotes, values)) + ', ST_GeomFromText(\'' + wkt + '\', ' + str(proj) + ')' + ')')
-
-
-def str_with_quotes(obj):
-    return '"' + str(obj) + '"'
-
-
-def str_with_single_quotes(obj):
-    return '\'' + str(obj) + '\''
-
-
-class DB(object):
-    conn_string = ''
-    conn = None
-
-    """docstring for DB."""
-
-    def __init__(self, conn_string):
-        super(DB, self).__init__()
-        self.conn_string = conn_string
-        try:
-            self.conn = psycopg2.connect(conn_string)
-        except psycopg2.Error as e:
-            print(e)
-            self.close_connection()
-            sys.exit(1)
-
-    def query(self, query, commit=False):
-        try:
-            print("executing Query : ", query)
-            cursor = self.conn.cursor()
-            cursor.execute(query)
-            if commit:
-                self.conn.commit()
-        except psycopg2.Error as e:
-            print(e)
-
-    def drop_table(self, table_name):
-        try:
-            print('Droping table ', table_name)
-            cursor = self.conn.cursor()
-            cursor.execute('DROP TABLE IF EXISTS ' + table_name)
-            self.conn.commit()
-        except Exception as e:
-            print(e)
-
-    def create_table(self, table_name, col_names, col_types, id_col_name='id'):
-        try:
-            print('Creating table ', table_name)
-            # lower all
-            col_names = [x.lower() for x in col_names]
-            col_types = [x.lower() for x in col_types]
-
-            query = 'CREATE TABLE IF NOT EXISTS ' + table_name + '(' + id_col_name + ' bigserial, ' + ', '.join(
-                ' '.join(n) for n in zip(col_names, col_types)) + ')'
-            print(query)
-            cursor = self.conn.cursor()
-            cursor.execute(query)
-            self.conn.commit()
-        except Exception as e:
-            print(e)
-
-    def close_connection(self, ):
-        self.conn.close()
-
+        db.query(commit=True,
+                 query='INSERT INTO ' + geo_schema + '.' + table_name
+                    + ' (' + ', '.join(map(db_helper.str_with_quotes, [x.lower() for x in db_attributes_names])) + ')'
+                    + ' VALUES ('
+                       + ', '.join(map(db_helper.str_with_single_quotes, values))
+                       + ', ST_GeomFromText(\'' + wkt + '\', ' + str(proj) + ')'
+                    + ')'
+                 )
 
 # git pull
 #g = git.cmd.Git(g_dir)
 #g.pull()
 
 # connect to database
-db = DB(conn_string="host='localhost' port='32768' dbname='toolboxdb' user='hotmaps' password='" + DB_password + "'")
+db = db_helper.DB(host=DB_host, port=DB_port, database=DB_database, user=DB_user, password=DB_password)
 
 # read datapackage.json (dp)
 try:
-    dp = json.load(open(g_dir + '/datapackage.json'))
+    dp = json.load(open(git_path + '/datapackage.json'))
 
     gis_data_type = dp['profile']
     gis_resources = dp['resources']
@@ -174,6 +107,12 @@ try:
             proj = vector['epsg']
             geom_type = vector['geometry_type']
             schema = vector['schema']
+
+            # retrieve start and end date
+            temp = r['temporal']
+            start_date = temp['start']
+            end_date = temp['end']
+
             attributes_names = []
             attributes_types = []
             for att in schema:
@@ -226,6 +165,12 @@ try:
         elif gis_data_type == 'raster-data-resource':
             raster = r['raster']
             proj = raster['epsg']
+
+            # retrieve start and end date
+            temp = r['temporal']
+            start_date = temp['start']
+            end_date = temp['end']
+
             #number_of_bands = raster['number_of_bands']
             #band0 = raster['band0']
             raster_path = os.path.join(base_path, 'git-repos', repository_name, path)
@@ -242,6 +187,7 @@ try:
         elif gis_data_type == 'tabular-data-resource':
             schema = r['schema']
 
+            # retrieve start and end date
             temp = r['temporal']
             start_date = temp['start']
             end_date = temp['end']
@@ -302,7 +248,7 @@ try:
             db.create_table(table_name=stat_schema + '.' + table_name, col_names=db_attributes_names,
                             col_types=db_attributes_types, id_col_name='id')
 
-            finalPath = g_dir + '/' + path
+            finalPath = git_path + '/' + path
 
             file = open(finalPath, "r")
             reader = csv.DictReader(file)

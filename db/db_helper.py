@@ -15,9 +15,13 @@ class DB(object):
 
     """docstring for DB."""
 
-    def __init__(self, conn_string):
+    def __init__(self, host, port, database, user, password):
         super(DB, self).__init__()
-        self.conn_string = conn_string
+        self.conn_string = conn_string="host='" + host + "' " + \
+                              "port='" + port + "' " + \
+                              "dbname='" + database + "' " + \
+                              "user='" + user + "' " + \
+                              "password='" + password + "'"
         try:
             self.conn = psycopg2.connect(conn_string)
         except psycopg2.Error as e:
