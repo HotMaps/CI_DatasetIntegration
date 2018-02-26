@@ -4,7 +4,7 @@
 
 # Database connection
 DB_host = 'localhost'
-DB_port = 5432
+DB_port = '5432'
 DB_user = 'postgres'
 DB_database = 'mydb'
 DB_password = 'password'
