@@ -1,19 +1,18 @@
 # python 3.5
 import sys
-import git
 import json
 from pprint import pprint
 import os.path
-import psycopg2
 import osgeo.ogr
 import traceback
 import logging
 import subprocess
 import csv
-from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path
+from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, GEO_number_of_pyarmid_levels, GEO_user, GEO_password
 from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
+import requests
 
 # Validate_Datapackage
 print_with_color = False
@@ -45,7 +44,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 # git repositories path
 repositories_base_path = GIT_base_path
 repository_name = 'HDD_CDD_curr'
-git_path = os.path.join(repositories_base_path, repository_name)
+repository_path = os.path.join(repositories_base_path, repository_name)
 
 # README
 # To test this script localy, run the following script before
@@ -126,7 +125,7 @@ except Exception as e:
 
 # read datapackage.json (dp)
 try:
-    dp = json.load(open(git_path + '/datapackage.json'))
+    dp = json.load(open(repository_path + '/datapackage.json'))
 
     gis_data_type = dp['profile']
     gis_resources = dp['resources']
@@ -228,91 +227,145 @@ try:
             print(cmds)
             subprocess.call(cmds, shell=True)
 
-            # precompute_test.py
-            try:
-                # LAU
-                # rast_tbl = geo_schema + "." + raster_table_name
-                rast_tbl = geo_schema + '.' + raster_table_name
-                vect_tbl = "public." + lau_table_name
-                vect_tbl_name = lau_table_name
-                prec_tbl = stat_schema + '.' + precomputed_table_name_lau
-                prec_tbl_name = precomputed_table_name_lau
+            # Precompute layers for nuts and lau
+            # LAU
+            # rast_tbl = geo_schema + "." + raster_table_name
+            rast_tbl = geo_schema + '.' + raster_table_name
+            vect_tbl = "public." + lau_table_name
+            vect_tbl_name = lau_table_name
+            prec_tbl = stat_schema + '.' + precomputed_table_name_lau
+            prec_tbl_name = precomputed_table_name_lau
 
-                db.drop_table(table_name=prec_tbl, notices=verbose)
+            db.drop_table(table_name=prec_tbl, notices=verbose)
 
-                attributes_names = (
-                    'count', 'sum', 'mean', 'stddev', 'min', 'max', 'comm_id', 'fk_' + vect_tbl_name + '_gid')
-                constraints = "ALTER TABLE " + prec_tbl + " " \
-                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + vect_tbl_name + "_gid_fkey " \
-                              + "FOREIGN KEY (fk_" + vect_tbl_name + "_gid) " \
-                              + "REFERENCES " + vect_tbl + "(gid) " \
-                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
+            attributes_names = (
+                'count', 'sum', 'mean', 'stddev', 'min', 'max', 'comm_id', 'fk_' + vect_tbl_name + '_gid')
+            constraints = "ALTER TABLE " + prec_tbl + " " \
+                          + "ADD CONSTRAINT " + prec_tbl_name + "_" + vect_tbl_name + "_gid_fkey " \
+                          + "FOREIGN KEY (fk_" + vect_tbl_name + "_gid) " \
+                          + "REFERENCES " + vect_tbl + "(gid) " \
+                          + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
 
-                db.create_table(table_name=prec_tbl,
-                                col_names=attributes_names,
-                                col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
-                                           'numeric(20,2)', 'varchar(255)', 'bigint'),
-                                constraints_str=constraints,
-                                notices=verbose)
+            db.create_table(table_name=prec_tbl,
+                            col_names=attributes_names,
+                            col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
+                                       'numeric(20,2)', 'varchar(255)', 'bigint'),
+                            constraints_str=constraints,
+                            notices=verbose)
 
-                query = "SELECT (" \
-                        + "SELECT (ST_SummaryStatsAgg(ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
-                        vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
-                        + "FROM " + rast_tbl + " " \
-                        + "WHERE ST_Intersects(" \
-                        + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
-                        + ") " \
-                        + ").*, " + vect_tbl + ".comm_id, " + vect_tbl + ".gid " \
-                        + "FROM " + vect_tbl + " "
+            query = "SELECT (" \
+                    + "SELECT (ST_SummaryStatsAgg(ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
+                    vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
+                    + "FROM " + rast_tbl + " " \
+                    + "WHERE ST_Intersects(" \
+                    + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
+                    + ") " \
+                    + ").*, " + vect_tbl + ".comm_id, " + vect_tbl + ".gid " \
+                    + "FROM " + vect_tbl + " "
 
-                db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
-                                                             + ' (' + ', '.join(
-                    map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
-                                                             + query + ' ;')
+            db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
+                                                         + ' (' + ', '.join(
+                map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
+                                                         + query + ' ;')
 
-                # NUTS
-                vect_tbl = geo_schema + '.' + nuts_table_name
-                prec_tbl = stat_schema + '.' + precomputed_table_name_nuts
-                vect_tbl_name = nuts_table_name
-                prec_tbl_name = precomputed_table_name_nuts
+            # NUTS
+            vect_tbl = geo_schema + '.' + nuts_table_name
+            prec_tbl = stat_schema + '.' + precomputed_table_name_nuts
+            vect_tbl_name = nuts_table_name
+            prec_tbl_name = precomputed_table_name_nuts
 
-                db.drop_table(table_name=prec_tbl, notices=verbose)
+            db.drop_table(table_name=prec_tbl, notices=verbose)
 
-                attributes_names = (
-                    'count', 'sum', 'mean', 'stddev', 'min', 'max', 'nuts_id', 'fk_' + vect_tbl_name + '_gid')
-                constraints = "ALTER TABLE " + prec_tbl + " " \
-                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + vect_tbl_name + "_gid_fkey " \
-                              + "FOREIGN KEY (fk_" + vect_tbl_name + "_gid) " \
-                              + "REFERENCES " + vect_tbl + "(gid) " \
-                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
+            attributes_names = (
+                'count', 'sum', 'mean', 'stddev', 'min', 'max', 'nuts_id', 'fk_' + vect_tbl_name + '_gid')
+            constraints = "ALTER TABLE " + prec_tbl + " " \
+                          + "ADD CONSTRAINT " + prec_tbl_name + "_" + vect_tbl_name + "_gid_fkey " \
+                          + "FOREIGN KEY (fk_" + vect_tbl_name + "_gid) " \
+                          + "REFERENCES " + vect_tbl + "(gid) " \
+                          + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
 
-                db.create_table(table_name=prec_tbl,
-                                col_names=attributes_names,
-                                col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
-                                           'numeric(20,2)', 'varchar(255)', 'bigint'),
-                                constraints_str=constraints,
-                                notices=verbose)
+            db.create_table(table_name=prec_tbl,
+                            col_names=attributes_names,
+                            col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
+                                       'numeric(20,2)', 'varchar(255)', 'bigint'),
+                            constraints_str=constraints,
+                            notices=verbose)
 
-                query = "SELECT (" \
-                        + "SELECT (ST_SummaryStatsAgg( ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
-                        vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
-                        + "FROM " + rast_tbl + " " \
-                        + "WHERE ST_Intersects(" \
-                        + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
-                        + ") " \
-                        + ").*, " + vect_tbl + ".nuts_id, " + vect_tbl + ".gid " \
-                        + "FROM " + vect_tbl + " "
+            query = "SELECT (" \
+                    + "SELECT (ST_SummaryStatsAgg( ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
+                    vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
+                    + "FROM " + rast_tbl + " " \
+                    + "WHERE ST_Intersects(" \
+                    + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
+                    + ") " \
+                    + ").*, " + vect_tbl + ".nuts_id, " + vect_tbl + ".gid " \
+                    + "FROM " + vect_tbl + " "
 
-                db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
-                                                             + ' (' + ', '.join(
-                    map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
-                                                             + query + ' ;')
+            db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
+                                                         + ' (' + ', '.join(
+                map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
+                                                         + query + ' ;')
 
-            except Exception as e:
-                logging.error(traceback.format_exc())
-                sys.exit(1)
 
-            db.close_connection()
+            # build pyramid and add layer to geoserver
+            pyramid_path = os.path.join(GEO_base_path, name)
+
+            # build pyramid using gdal_retile script
+            # todo: could improve by enabling "COMPRESS=JPEG" option, but doing so raised error
+            cmds = 'cd ' + os.path.join(repository_path, 'data') + ' ; rm -r ' + pyramid_path + ' ; mkdir ' + pyramid_path + ' ; gdal_retile.py -v -r bilinear ' + \
+                   '-levels ' + str(GEO_number_of_pyarmid_levels) + ' ' + \
+                   '-ps 2048 2048 -co "TILED=YES" ' + \
+                   '-targetDir ' + pyramid_path + ' ' + raster_path
+            print(cmds)
+            #subprocess.call(cmds, shell=True)
+
+            # add to geoserver
+
+            workspace = 'hotmaps'
+
+            # remove coverage store from geoserver
+            response = requests.delete(
+                'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + name + '?recurse=true',
+                auth=(GEO_user, GEO_password),
+            )
+            print(response)
+            # create data store
+            headers = {
+                'Content-type': 'text/xml',
+            }
+            data = '<coverageStore>' \
+                   '<name>' + name + '</name>' \
+                   '<workspace>hotmaps</workspace>' \
+                   '<enabled>true</enabled>' \
+                   '<type>ImagePyramid</type>' \
+                   '<url>file:raster-layers/pop_tot_curr_density</url>' \
+                   '</coverageStore>'
+
+            response = requests.post(
+                'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
+                headers=headers,
+                data=data,
+                auth=(GEO_user, GEO_password),
+            )
+            #print(data)
+            print(response)
+
+            # create layer
+            data = '<coverage>' \
+                   '<name>' + name + '</name>' \
+                   '<title>' + name + '</title>' \
+                   '<srs>EPSG:' + proj + '</srs>' \
+                   '</coverage>'
+
+            response = requests.post(
+                'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + name + '/coverages',
+                headers=headers,
+                data=data,
+                auth=(GEO_user, GEO_password),
+            )
+            #print(data)
+            print(response)
+
         elif gis_data_type == 'tabular-data-resource':
             schema = r['schema']
 
@@ -377,7 +430,7 @@ try:
             db.create_table(table_name=stat_schema + '.' + table_name, col_names=db_attributes_names,
                             col_types=db_attributes_types, id_col_name='id')
 
-            finalPath = git_path + '/' + path
+            finalPath = repository_path + '/' + path
 
             file = open(finalPath, "r")
             reader = csv.DictReader(file)

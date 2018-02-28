@@ -70,7 +70,15 @@ try:
             #subprocess.call(cmds, shell=True)
 
             # add to geoserver
+
             workspace = 'hotmaps'
+
+            # remove coverage store from geoserver
+            response = requests.delete(
+                'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + name + '?recurse=true',
+                auth=(GEO_user, GEO_password),
+            )
+            print(response)
             # create data store
             headers = {
                 'Content-type': 'text/xml',
@@ -87,10 +95,10 @@ try:
                 'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
                 headers=headers,
                 data=data,
-                auth=(GEO_user, GEO_password)
+                auth=(GEO_user, GEO_password),
             )
             #print(data)
-            #print(response)
+            print(response)
 
             # create layer
             data = '<coverage>' \
@@ -103,10 +111,10 @@ try:
                 'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + name + '/coverages',
                 headers=headers,
                 data=data,
-                auth=(GEO_user, GEO_password)
+                auth=(GEO_user, GEO_password),
             )
             #print(data)
-            #print(response)
+            print(response)
 
         elif gis_data_type == 'tabular-data-resource':
             print('tabular data resource')
