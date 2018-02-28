@@ -12,10 +12,30 @@ import subprocess
 import csv
 from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path
 from db import db_helper
-
-# schemas
+import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
 
+# Validate_Datapackage
+print_with_color = False
+
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
+lau_table_name = 'lau'
+nuts_table_name = 'nuts'
+vector_SRID = "3035"
+raster_SRID = "3035"
+
+# schemas
 stat_schema = 'public'  # 'stat' on production/dev database
 geo_schema = 'public'  # 'geo' on production/dev database
 
@@ -87,6 +107,22 @@ def import_shapefile(src_file, date):
 
 # connect to database
 db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
+verbose = True
+
+# Validate_Datapackage
+try:
+    list_dirs = [name for name in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, name))]
+    list_dirs = sorted(list_dirs)
+    for d in list_dirs:
+        d_file_path = os.path.join(base_path, d, 'datapackage.json')
+        print()
+        print("#########################")
+        validate_datapackage.print(d, bcolors.HEADER)
+        print("#########################")
+        validate_datapackage.validate_datapackage(d_file_path)
+except Exception as e:
+    logging.error(traceback.format_exc())
+    sys.exit(1)
 
 # read datapackage.json (dp)
 try:
@@ -105,6 +141,10 @@ try:
         name = r['name']
         path = r['path']
         # date = r['date']
+        raster_table_name = name.split('.')[0]
+        precomputed_table_name_lau = raster_table_name + "_" + lau_table_name + "_test"
+        precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name + "_test"
+
         if gis_data_type == 'vector-package':
             vector = r['vector']
             proj = vector['epsg']
@@ -187,6 +227,92 @@ try:
             cmds = 'cd git-repos/' + repository_name + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + stat_schema + '.' + name + ' | psql'
             print(cmds)
             subprocess.call(cmds, shell=True)
+
+            # precompute_test.py
+            try:
+                # LAU
+                # rast_tbl = geo_schema + "." + raster_table_name
+                rast_tbl = geo_schema + '.' + raster_table_name
+                vect_tbl = "public." + lau_table_name
+                vect_tbl_name = lau_table_name
+                prec_tbl = stat_schema + '.' + precomputed_table_name_lau
+                prec_tbl_name = precomputed_table_name_lau
+
+                db.drop_table(table_name=prec_tbl, notices=verbose)
+
+                attributes_names = (
+                    'count', 'sum', 'mean', 'stddev', 'min', 'max', 'comm_id', 'fk_' + vect_tbl_name + '_gid')
+                constraints = "ALTER TABLE " + prec_tbl + " " \
+                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + vect_tbl_name + "_gid_fkey " \
+                              + "FOREIGN KEY (fk_" + vect_tbl_name + "_gid) " \
+                              + "REFERENCES " + vect_tbl + "(gid) " \
+                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
+
+                db.create_table(table_name=prec_tbl,
+                                col_names=attributes_names,
+                                col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
+                                           'numeric(20,2)', 'varchar(255)', 'bigint'),
+                                constraints_str=constraints,
+                                notices=verbose)
+
+                query = "SELECT (" \
+                        + "SELECT (ST_SummaryStatsAgg(ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
+                        vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
+                        + "FROM " + rast_tbl + " " \
+                        + "WHERE ST_Intersects(" \
+                        + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
+                        + ") " \
+                        + ").*, " + vect_tbl + ".comm_id, " + vect_tbl + ".gid " \
+                        + "FROM " + vect_tbl + " "
+
+                db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
+                                                             + ' (' + ', '.join(
+                    map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
+                                                             + query + ' ;')
+
+                # NUTS
+                vect_tbl = geo_schema + '.' + nuts_table_name
+                prec_tbl = stat_schema + '.' + precomputed_table_name_nuts
+                vect_tbl_name = nuts_table_name
+                prec_tbl_name = precomputed_table_name_nuts
+
+                db.drop_table(table_name=prec_tbl, notices=verbose)
+
+                attributes_names = (
+                    'count', 'sum', 'mean', 'stddev', 'min', 'max', 'nuts_id', 'fk_' + vect_tbl_name + '_gid')
+                constraints = "ALTER TABLE " + prec_tbl + " " \
+                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + vect_tbl_name + "_gid_fkey " \
+                              + "FOREIGN KEY (fk_" + vect_tbl_name + "_gid) " \
+                              + "REFERENCES " + vect_tbl + "(gid) " \
+                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
+
+                db.create_table(table_name=prec_tbl,
+                                col_names=attributes_names,
+                                col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
+                                           'numeric(20,2)', 'varchar(255)', 'bigint'),
+                                constraints_str=constraints,
+                                notices=verbose)
+
+                query = "SELECT (" \
+                        + "SELECT (ST_SummaryStatsAgg( ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
+                        vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
+                        + "FROM " + rast_tbl + " " \
+                        + "WHERE ST_Intersects(" \
+                        + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
+                        + ") " \
+                        + ").*, " + vect_tbl + ".nuts_id, " + vect_tbl + ".gid " \
+                        + "FROM " + vect_tbl + " "
+
+                db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
+                                                             + ' (' + ', '.join(
+                    map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
+                                                             + query + ' ;')
+
+            except Exception as e:
+                logging.error(traceback.format_exc())
+                sys.exit(1)
+
+            db.close_connection()
         elif gis_data_type == 'tabular-data-resource':
             schema = r['schema']
 
