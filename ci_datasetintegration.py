@@ -14,6 +14,8 @@ from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_us
 from db import db_helper
 
 # schemas
+from db.db_helper import str_with_quotes, str_with_single_quotes
+
 stat_schema = 'public'  # 'stat' on production/dev database
 geo_schema = 'public'  # 'geo' on production/dev database
 
@@ -22,9 +24,8 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'electricity_emissions_hourly'
+repository_name = 'HDD_CDD_curr'
 git_path = os.path.join(repositories_base_path, repository_name)
-
 
 # README
 # To test this script localy, run the following script before
@@ -71,19 +72,21 @@ def import_shapefile(src_file, date):
 
         db.query(commit=True,
                  query='INSERT INTO ' + geo_schema + '.' + table_name
-                    + ' (' + ', '.join(map(db_helper.str_with_quotes, [x.lower() for x in db_attributes_names])) + ')'
-                    + ' VALUES ('
+                       + ' (' + ', '.join(
+                     map(db_helper.str_with_quotes, [x.lower() for x in db_attributes_names])) + ')'
+                       + ' VALUES ('
                        + ', '.join(map(db_helper.str_with_single_quotes, values))
                        + ', ST_GeomFromText(\'' + wkt + '\', ' + str(proj) + ')'
-                    + ')'
+                       + ')'
                  )
 
+
 # git pull
-#g = git.cmd.Git(g_dir)
-#g.pull()
+# g = git.cmd.Git(g_dir)
+# g.pull()
 
 # connect to database
-db = db_helper.DB(host=DB_host, port=DB_port, database=DB_database, user=DB_user, password=DB_password)
+db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
 
 # read datapackage.json (dp)
 try:
@@ -171,15 +174,15 @@ try:
             start_date = temp['start']
             end_date = temp['end']
 
-            #number_of_bands = raster['number_of_bands']
-            #band0 = raster['band0']
+            # number_of_bands = raster['number_of_bands']
+            # band0 = raster['band0']
             raster_path = os.path.join(base_path, 'git-repos', repository_name, path)
 
-            os.environ['PGHOST'] = 'localhost'
-            os.environ['PGPORT'] = '32768'
-            os.environ['PGUSER'] = 'hotmaps'
+            os.environ['PGHOST'] = DB_host
+            os.environ['PGPORT'] = DB_port
+            os.environ['PGUSER'] = DB_user
             os.environ['PGPASSWORD'] = DB_password
-            os.environ['PGDATABASE'] = 'toolboxdb'
+            os.environ['PGDATABASE'] = DB_database
 
             cmds = 'cd git-repos/' + repository_name + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + stat_schema + '.' + name + ' | psql'
             print(cmds)
