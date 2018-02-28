@@ -2,5 +2,8 @@ jsonschema
 # dependencies :
 # sudo apt-get install python-numpy libgdal1h gdal-bin libgdal-dev
 
-rasterstats
+
+#rasterstats
 psycopg2
+python-gitlab
+gitpython

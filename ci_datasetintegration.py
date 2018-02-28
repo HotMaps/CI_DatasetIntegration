@@ -3,6 +3,9 @@ import sys
 import json
 from pprint import pprint
 import os.path
+import git
+from git import Repo
+import datetime
 import osgeo.ogr
 import traceback
 import logging
@@ -13,6 +16,9 @@ from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
 import requests
+import gitlab
+import logging
+logging.basicConfig(level=logging.INFO)
 
 # Validate_Datapackage
 print_with_color = False
@@ -43,7 +49,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'HDD_CDD_curr'
+repository_name = ''
 repository_path = os.path.join(repositories_base_path, repository_name)
 
 # README
@@ -105,8 +111,46 @@ def import_shapefile(src_file, date):
 # g.pull()
 
 # connect to database
-db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
+#db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
 verbose = True
+
+#check repository on gitlab
+date = datetime.datetime.utcnow()-datetime.timedelta(days=1)
+dateStr = date.isoformat(sep='T', timespec='seconds')+'Z'
+gl = gitlab.Gitlab('https://gitlab.com', private_token='f-JzjmRRnxzwqC5o3zsQ')
+
+group = gl.groups.get('1354895')
+
+projects = group.projects.list(all=True)
+
+for project in projects:
+
+    proj = gl.projects.get(id=project.id)
+
+    commits = proj.commits.list(since=dateStr)
+    if len(commits)==0:
+        print('No commit')
+    else:
+        repository_name = proj.name
+        repository_path = os.path.join(repositories_base_path, repository_name)
+        print(repository_name)
+        if os.path.exists(repository_path):
+            # git pull
+            print('update repository')
+            g = git.cmd.Git(repository_path)
+            g.pull()
+            print('successfuly updated repository')
+
+        else:
+            # git clone
+            print('clone repository')
+            url = proj.ssh_url_to_repo
+            Repo.clone_from(url, repository_path)
+            print('successfuly cloned repository')
+
+
+    
+
 
 # Validate_Datapackage
 try:
@@ -317,7 +361,7 @@ try:
                    '-ps 2048 2048 -co "TILED=YES" ' + \
                    '-targetDir ' + pyramid_path + ' ' + raster_path
             print(cmds)
-            #subprocess.call(cmds, shell=True)
+            subprocess.call(cmds, shell=True)
 
             # add to geoserver
 
