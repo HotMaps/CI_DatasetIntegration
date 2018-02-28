@@ -11,3 +11,9 @@ DB_password = 'password'
 
 # Git repositories
 GIT_base_path = '/path/to/my/repos'
+
+# Geoserver layers
+GEO_base_path = '/path/to/my/layers'
+GEO_number_of_pyarmid_levels = 4
+GEO_user = 'admin'
+GEO_password = 'geoserver'
