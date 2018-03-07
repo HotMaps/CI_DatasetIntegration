@@ -11,13 +11,15 @@ import traceback
 import logging
 import subprocess
 import csv
-from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, GEO_number_of_pyarmid_levels, GEO_user, GEO_password
+from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, \
+    GEO_number_of_pyarmid_levels, GEO_user, GEO_password
 from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
 import requests
 import gitlab
 import logging
+
 logging.basicConfig(level=logging.INFO)
 
 # Validate_Datapackage
@@ -49,7 +51,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = ''
+repository_name = 'electricity_emissions_hourly'
 repository_path = os.path.join(repositories_base_path, repository_name)
 
 # README
@@ -114,7 +116,8 @@ def import_shapefile(src_file, date):
 db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
 verbose = True
 
-#check repository on gitlab
+# check repository on gitlab
+"""
 date = datetime.datetime.utcnow()-datetime.timedelta(days=1)
 dateStr = date.isoformat(sep='T', timespec='seconds')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token='f-JzjmRRnxzwqC5o3zsQ')
@@ -148,9 +151,7 @@ for project in projects:
             Repo.clone_from(url, repository_path)
             print('successfuly cloned repository')
 
-
-    
-
+"""
 
 # Validate_Datapackage
 try:
@@ -160,7 +161,8 @@ try:
         d_file_path = os.path.join(base_path, d, 'datapackage.json')
         print()
         print("#########################")
-        validate_datapackage.print(d, bcolors.HEADER)
+        # validate_datapackage.print(d, bcolors.HEADER)
+        print(d)
         print("#########################")
         validate_datapackage.validate_datapackage(d_file_path)
 except Exception as e:
@@ -350,13 +352,13 @@ try:
                 map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
                                                          + query + ' ;')
 
-
             # build pyramid and add layer to geoserver
             pyramid_path = os.path.join(GEO_base_path, name)
 
             # build pyramid using gdal_retile script
             # todo: could improve by enabling "COMPRESS=JPEG" option, but doing so raised error
-            cmds = 'cd ' + os.path.join(repository_path, 'data') + ' ; rm -r ' + pyramid_path + ' ; mkdir ' + pyramid_path + ' ; gdal_retile.py -v -r bilinear ' + \
+            cmds = 'cd ' + os.path.join(repository_path,
+                                        'data') + ' ; rm -r ' + pyramid_path + ' ; mkdir ' + pyramid_path + ' ; gdal_retile.py -v -r bilinear ' + \
                    '-levels ' + str(GEO_number_of_pyarmid_levels) + ' ' + \
                    '-ps 2048 2048 -co "TILED=YES" ' + \
                    '-targetDir ' + pyramid_path + ' ' + raster_path
@@ -379,11 +381,11 @@ try:
             }
             data = '<coverageStore>' \
                    '<name>' + name + '</name>' \
-                   '<workspace>hotmaps</workspace>' \
-                   '<enabled>true</enabled>' \
-                   '<type>ImagePyramid</type>' \
-                   '<url>file:raster-layers/pop_tot_curr_density</url>' \
-                   '</coverageStore>'
+                                     '<workspace>hotmaps</workspace>' \
+                                     '<enabled>true</enabled>' \
+                                     '<type>ImagePyramid</type>' \
+                                     '<url>file:raster-layers/pop_tot_curr_density</url>' \
+                                     '</coverageStore>'
 
             response = requests.post(
                 'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
@@ -391,15 +393,15 @@ try:
                 data=data,
                 auth=(GEO_user, GEO_password),
             )
-            #print(data)
+            # print(data)
             print(response)
 
             # create layer
             data = '<coverage>' \
                    '<name>' + name + '</name>' \
-                   '<title>' + name + '</title>' \
-                   '<srs>EPSG:' + proj + '</srs>' \
-                   '</coverage>'
+                                     '<title>' + name + '</title>' \
+                                                        '<srs>EPSG:' + proj + '</srs>' \
+                                                                              '</coverage>'
 
             response = requests.post(
                 'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + name + '/coverages',
@@ -407,7 +409,7 @@ try:
                 data=data,
                 auth=(GEO_user, GEO_password),
             )
-            #print(data)
+            # print(data)
             print(response)
 
         elif gis_data_type == 'tabular-data-resource':
@@ -470,26 +472,59 @@ try:
             db_attributes_names.append('end_date')
             db_attributes_types.append('timestamp')
 
+            db_attributes_names.append('fk_nuts_gid')
+            db_attributes_types.append('bigint')
+
+            db_attributes_names.append('fk_time_id')
+            db_attributes_types.append('bigint')
+
             db.drop_table(table_name=stat_schema + '.' + table_name)
+
+            # TODO : Handle LAU/Nuts difference (use the spatial_resolution)
+            spatial_resolution = r['spatial_resolution']
+
+            constraints = "ALTER TABLE " + stat_schema + '.' + table_name + " " \
+                          + "ADD CONSTRAINT " + table_name + "_" + "nuts" + "_gid_fkey " \
+                          + "FOREIGN KEY (fk_" + "nuts" + "_gid) " \
+                          + "REFERENCES " + "geo.nuts" + "(gid) " \
+                          + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
+
+            # TODO : the constraints time is there. Now you need to understand how put it in the create_table
+            constraintsTime = "ALTER TABLE " + stat_schema + '.' + table_name + " " \
+                              + "ADD CONSTRAINT " + table_name + "_" + "time" + "_id_fkey " \
+                              + "FOREIGN KEY (fk_" + "time" + "_id) " \
+                              + "REFERENCES " + "stat.nuts" + "(id) " \
+                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
+
             db.create_table(table_name=stat_schema + '.' + table_name, col_names=db_attributes_names,
-                            col_types=db_attributes_types, id_col_name='id')
+                            col_types=db_attributes_types, id_col_name='id', constraints_str=constraints)
 
             finalPath = repository_path + '/' + path
 
             file = open(finalPath, "r")
             reader = csv.DictReader(file)
+            fk_nuts_gid = None
 
             for row in reader:
                 values = []
                 for name in attributes_names:
                     att = row[name]
                     values.append(att)
+                    if name == "NUTS0_code":
+                        fk_nuts_gid = db.query(commit=True,
+                                               query="SELECT gid FROM geo.nuts WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
+                        print(fk_nuts_gid)
+                        # TODO : Method to recuperate the granularity and put the id in the fk
+                        fk_nuts_gid = db.query(commit=True,
+                                               query="SELECT id FROM stat.time WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
 
                 if valuesUnit and len(valuesUnit) > 0:
                     values.extend(valuesUnit)
 
                 values.append(start_date)
                 values.append(end_date)
+                if fk_nuts_gid is not None and len(fk_nuts_gid) > 0:
+                    values.append(fk_nuts_gid[0][0])
 
                 db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
                     map(str_with_quotes,
