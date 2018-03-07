@@ -115,7 +115,8 @@ def import_shapefile(src_file, date):
 verbose = True
 
 #check repository on gitlab
-date = datetime.datetime.utcnow()-datetime.timedelta(days=1)
+#date = datetime.datetime.utcnow()-datetime.timedelta(days=1)
+date = datetime.datetime(2010, 1, 1, 0, 0, 0)
 dateStr = date.isoformat(sep='T', timespec='seconds')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token='f-JzjmRRnxzwqC5o3zsQ')
 
@@ -149,7 +150,7 @@ for project in projects:
             print('successfuly cloned repository')
 
 
-    
+
 
 
 # Validate_Datapackage
