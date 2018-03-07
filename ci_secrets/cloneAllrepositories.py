@@ -1,4 +1,13 @@
 
+import datetime
+import gitlab
+import os.path
+import git
+from git import Repo
+
+repositories_base_path = '/path/to/my/layers'
+repository_name = ''
+repository_path = os.path.join(repositories_base_path, repository_name)
 
 #check repository on gitlab
 #date = datetime.datetime.utcnow()-datetime.timedelta(days=1)
