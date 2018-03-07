@@ -111,7 +111,7 @@ def import_shapefile(src_file, date):
 # g.pull()
 
 # connect to database
-#db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
+db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
 verbose = True
 
 #check repository on gitlab
