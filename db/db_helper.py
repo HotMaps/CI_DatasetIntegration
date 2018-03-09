@@ -64,7 +64,7 @@ class DB(object):
 
             query = 'CREATE TABLE IF NOT EXISTS ' + table_name + \
                     '(' + id_col_name + ' bigserial PRIMARY KEY, ' + \
-                    ', '.join(' '.join(n) for n in zip(col_names, col_types)) + "); " + \
+                    ', '.join(' '.join(n) for n in zip(col_names, col_types)) + '); ' + \
                     constraints_str + '; '
             print(query)
             cursor = self.conn.cursor()
