@@ -203,7 +203,7 @@ for project in projects:
 
 # Validate_Datapackage
 try:
-    list_dirs = [name for name in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, name))]
+    list_dirs = [name for name in os.listdir(GIT_base_path) if os.path.isdir(os.path.join(GIT_base_path, name))]
     list_dirs = sorted(list_dirs)
     for d in list_dirs:
         d_file_path = os.path.join(base_path, d, 'datapackage.json')
