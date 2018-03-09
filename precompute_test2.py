@@ -15,7 +15,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 lau_table_name = 'lau'
 nuts_table_name = 'nuts'
-raster_table_name = 'pop_tot_curr_density'
+raster_table_name = 'heat_tot_curr_density'
 precomputed_table_name_lau = raster_table_name + "_" + lau_table_name + "_test1"
 precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name + "_test1"
 vector_SRID = "3035"
@@ -34,7 +34,7 @@ try:
     vect_tbl_name = lau_table_name
     prec_tbl = stat_schema + '.' + precomputed_table_name_lau
     prec_tbl_name = precomputed_table_name_lau
-    #
+
     # db.drop_table(table_name=prec_tbl, notices=verbose)
     #
     # attributes_names = ('count', 'sum', 'mean', 'stddev', 'min', 'max', 'comm_id', 'fk_' + vect_tbl_name + '_gid')
@@ -64,7 +64,7 @@ try:
     # db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
     #     + ' (' + ', '.join(map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
     #     + query + ' ;')
-
+    #
     # NUTS
     vect_tbl = geo_schema + '.' + nuts_table_name
     prec_tbl = stat_schema + '.' + precomputed_table_name_nuts

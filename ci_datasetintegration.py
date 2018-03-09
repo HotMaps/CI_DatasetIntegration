@@ -5,51 +5,45 @@ from pprint import pprint
 import os.path
 import git
 from git import Repo
-import datetime
+from datetime import date, datetime, timedelta
 import osgeo.ogr
 import traceback
 import logging
 import subprocess
 import csv
-from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, GEO_number_of_pyarmid_levels, GEO_user, GEO_password
+from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, \
+    GEO_number_of_pyarmid_levels, GEO_user, GEO_password
 from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
 import requests
 import gitlab
 import logging
+
 logging.basicConfig(level=logging.INFO)
 
-# Validate_Datapackage
-print_with_color = False
+# schemas
+stat_schema = 'stat'  # 'stat' on production/dev database
+geo_schema = 'geo'  # 'geo' on production/dev database
 
-
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-
+# geo tables
 lau_table_name = 'lau'
+lau_table = 'public' + '.' + lau_table_name # change to geo_schema when lau table has been moved in db
 nuts_table_name = 'nuts'
+nuts_table = geo_schema + '.' + nuts_table_name
 vector_SRID = "3035"
 raster_SRID = "3035"
 
-# schemas
-stat_schema = 'public'  # 'stat' on production/dev database
-geo_schema = 'public'  # 'geo' on production/dev database
+# time tables
+time_table_name = 'time'
+time_table = stat_schema + '.' + time_table_name
 
 # current path
 base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = ''
+repository_name = 'electricity_emissions_hourly'
 repository_path = os.path.join(repositories_base_path, repository_name)
 
 # README
@@ -57,7 +51,7 @@ repository_path = os.path.join(repositories_base_path, repository_name)
 # to start postgis with the same options as DEV/PROD versions
 """
 #!/bin/bash
-sudo docker kill postgis-database
+sudo docker kill postgis-databaseprint(
 sudo docker rm postgis-database
 
 sudo docker run \
@@ -69,6 +63,62 @@ sudo docker run \
         -p 32768:5432 \
         -d hotmaps/postgis-database
 """
+
+def get_or_create_time_id(timestamp, granularity):
+    fk_time_id = db.query(commit=True,
+                          query="SELECT id FROM stat.time WHERE timestamp = '" + timestamp + "' AND granularity LIKE '" + granularity + "'")
+    if fk_time_id == None:
+        print("Error getting fk_time_id with psycopg2")
+    elif len(fk_time_id) == 0:
+        time_attributes = []
+        timestamp_att = datetime.strptime(timestamp, '%Y/%m/%d %H:%M:%S')
+
+        # timestamp
+        time_attributes.append(timestamp)
+        # year
+        year = timestamp_att.strftime('%Y')
+        time_attributes.append(year)
+        # month
+        time_attributes.append(timestamp_att.strftime('%m'))
+        # day
+        time_attributes.append(timestamp_att.strftime('%d'))
+        #[0][0] weekday
+        weekday_num = timestamp_att.strftime('%w')
+        if weekday_num != 0 and weekday_num != 6:
+            weekday = "Week"
+        else:
+            weekday = timestamp_att.strftime('%a')
+        time_attributes.append(weekday)
+        # season
+        year = int(year)
+        seasons = [('winter', (date(year, 1, 1),  date(year, 3, 20))),
+                   ('spring', (date(year, 3, 21),  date(year, 6, 20))),
+                   ('summer', (date(year, 6, 21),  date(year, 9, 22))),
+                   ('autumn', (date(year, 9, 23),  date(year, 12, 20))),
+                   ('winter', (date(year, 12, 21),  date(year, 12, 31)))]
+        season = next(s for s, (start, end) in seasons if start <= timestamp_att.date() <= end)
+        time_attributes.append(season)
+        # hour
+        hour = timestamp_att.strftime('%H')
+        time_attributes.append(hour)
+        # hour of yearprint(
+        day_of_year = timestamp_att.strftime('%j')
+        hour_of_year = int(day_of_year) * int(hour)
+        time_attributes.append(hour_of_year)
+        # date
+        time_attributes.append(timestamp_att.strftime('%Y-%m-%d'))
+        # granularity
+        time_attributes.append(granularity)
+
+        fk_time_id = db.query(commit=True,
+                 query='INSERT INTO ' + time_table +
+                       ' (timestamp, year, month, day, weekday, season, hour_of_day, hour_of_year, date, granularity) ' +
+                       'VALUES (' + ', '.join(map(str_with_single_quotes, time_attributes)) + ') RETURNING id')
+
+    if len(fk_time_id) > 0 and len(fk_time_id[0]) > 0:
+        fk_time_id = fk_time_id[0][0]
+
+    return fk_time_id
 
 
 def import_shapefile(src_file, date):
@@ -114,10 +164,10 @@ def import_shapefile(src_file, date):
 db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
 verbose = True
 
-#check repository on gitlab
-#date = datetime.datetime.utcnow()-datetime.timedelta(days=1)
-date = datetime.datetime(2010, 1, 1, 0, 0, 0)
-dateStr = date.isoformat(sep='T', timespec='seconds')+'Z'
+# check repository on gitlab
+"""
+repo_date = datetime.utcnow()-timedelta(days=1)
+dateStr = repo_date.isoformat(sep='T', timespec='seconds')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token='f-JzjmRRnxzwqC5o3zsQ')
 
 group = gl.groups.get('1354895')
@@ -149,9 +199,7 @@ for project in projects:
             Repo.clone_from(url, repository_path)
             print('successfuly cloned repository')
 
-
-
-
+"""
 
 # Validate_Datapackage
 try:
@@ -161,7 +209,8 @@ try:
         d_file_path = os.path.join(base_path, d, 'datapackage.json')
         print()
         print("#########################")
-        validate_datapackage.print(d, bcolors.HEADER)
+        # validate_datapackage.print(d, bcolors.HEADER)
+        print(d)
         print("#########################")
         validate_datapackage.validate_datapackage(d_file_path)
 except Exception as e:
@@ -351,13 +400,13 @@ try:
                 map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
                                                          + query + ' ;')
 
-
             # build pyramid and add layer to geoserver
             pyramid_path = os.path.join(GEO_base_path, name)
 
             # build pyramid using gdal_retile script
             # todo: could improve by enabling "COMPRESS=JPEG" option, but doing so raised error
-            cmds = 'cd ' + os.path.join(repository_path, 'data') + ' ; rm -r ' + pyramid_path + ' ; mkdir ' + pyramid_path + ' ; gdal_retile.py -v -r bilinear ' + \
+            cmds = 'cd ' + os.path.join(repository_path,
+                                        'data') + ' ; rm -r ' + pyramid_path + ' ; mkdir ' + pyramid_path + ' ; gdal_retile.py -v -r bilinear ' + \
                    '-levels ' + str(GEO_number_of_pyarmid_levels) + ' ' + \
                    '-ps 2048 2048 -co "TILED=YES" ' + \
                    '-targetDir ' + pyramid_path + ' ' + raster_path
@@ -380,11 +429,11 @@ try:
             }
             data = '<coverageStore>' \
                    '<name>' + name + '</name>' \
-                   '<workspace>hotmaps</workspace>' \
-                   '<enabled>true</enabled>' \
-                   '<type>ImagePyramid</type>' \
-                   '<url>file:raster-layers/pop_tot_curr_density</url>' \
-                   '</coverageStore>'
+                                     '<workspace>hotmaps</workspace>' \
+                                     '<enabled>true</enabled>' \
+                                     '<type>ImagePyramid</type>' \
+                                     '<url>file:raster-layers/pop_tot_curr_density</url>' \
+                                     '</coverageStore>'
 
             response = requests.post(
                 'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
@@ -392,15 +441,15 @@ try:
                 data=data,
                 auth=(GEO_user, GEO_password),
             )
-            #print(data)
+            # print(data)
             print(response)
 
             # create layer
             data = '<coverage>' \
                    '<name>' + name + '</name>' \
-                   '<title>' + name + '</title>' \
-                   '<srs>EPSG:' + proj + '</srs>' \
-                   '</coverage>'
+                                     '<title>' + name + '</title>' \
+                                                        '<srs>EPSG:' + proj + '</srs>' \
+                                                                              '</coverage>'
 
             response = requests.post(
                 'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + name + '/coverages',
@@ -408,7 +457,7 @@ try:
                 data=data,
                 auth=(GEO_user, GEO_password),
             )
-            #print(data)
+            # print(data)
             print(response)
 
         elif gis_data_type == 'tabular-data-resource':
@@ -465,32 +514,117 @@ try:
                 db_attributes_names.extend(valuesUnitName)
                 db_attributes_types.extend(valuesUnitType)
 
-            db_attributes_names.append('start_date')
-            db_attributes_types.append('timestamp')
-
-            db_attributes_names.append('end_date')
-            db_attributes_types.append('timestamp')
+            # db_attributes_names.append('start_date')
+            # db_attributes_types.append('timestamp')
+            #
+            # db_attributes_names.append('end_date')
+            # db_attributes_types.append('timestamp')
 
             db.drop_table(table_name=stat_schema + '.' + table_name)
+
+            # TODO : Handle LAU/Nuts difference (use the spatial_resolution)
+            # spatial resolution
+            spatial_resolution = r['spatial_resolution']
+            spatial_table = None
+            spatial_field_name = r['spatial_key_field']
+
+            if spatial_resolution.lower().startswith("nuts"):
+                spatial_table_name = nuts_table_name
+                spatial_table = nuts_table
+            elif spatial_resolution.lower().startswith("lau"):
+                spatial_table_name = lau_table_name
+                spatial_table = lau_table
+
+            # temporal resolution
+            temporal_resolution = ''
+            tr = r['temporal_resolution']
+            if tr.lower().startswith('year'):
+                temporal_resolution = 'year'
+            elif tr.lower().startswith('month'):
+                temporal_resolution = 'month'
+            elif tr.lower().startswith('day'):
+                temporal_resolution = 'day'
+            elif tr.lower().startswith('hour'):
+                temporal_resolution = 'hour'
+            elif tr.lower().stvaluesUnitartswith('minute'):
+                temporal_resolution = 'minute'
+            elif tr.lower().startswith('second'):
+                temporal_resolution = 'second'
+            elif tr.lower().startswith('quarter'):
+                temporal_resolution = 'quarter'
+            elif tr.lower().startswith('week'):
+                temporal_resolution = 'week'
+
+            constraints = ""
+            if spatial_table is not None:
+                constraints = constraints + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
+                              + "ADD CONSTRAINT " + table_name + "_" + spatial_table_name + "_gid_fkey " \
+                              + "FOREIGN KEY (fk_" + spatial_table_name + "_gid) " \
+                              + "REFERENCES " + spatial_table + "(gid) " \
+                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL ;"
+
+                db_attributes_names.append('fk_' + spatial_table_name + '_gid')
+                db_attributes_types.append('bigint')
+
+
+            if temporal_resolution is not None and len(temporal_resolution) > 0:
+                constraints = constraints + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
+                                  + "ADD CONSTRAINT " + table_name + "_" + time_table_name + "_id_fkey " \
+                                  + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
+                                  + "REFERENCES " + time_table + "(id) " \
+                                  + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL ;"
+
+                db_attributes_names.append('fk_' + time_table_name + '_id')
+                db_attributes_types.append('bigint')
+
+            # generate table with constraints
             db.create_table(table_name=stat_schema + '.' + table_name, col_names=db_attributes_names,
-                            col_types=db_attributes_types, id_col_name='id')
+                            col_types=db_attributes_types, id_col_name='id', constraints_str=constraints)
 
             finalPath = repository_path + '/' + path
 
             file = open(finalPath, "r")
             reader = csv.DictReader(file)
+            fk_gid = None
+            fk_time_id = None
 
             for row in reader:
                 values = []
                 for name in attributes_names:
+                    print(name)
                     att = row[name]
                     values.append(att)
+                    # handle spatial column
+                    if name == spatial_field_name:
+                        fk_gid = db.query(commit=True,
+                                          query="SELECT gid FROM geo.nuts WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
+                        if fk_gid is not None and len(fk_gid) > 0 and len(fk_gid[0]) > 0:
+                            fk_gid = fk_gid[0][0]
+                        print('fk_gid=', fk_gid)
+
+                    # handle temporal column
+                    if name == 'datetime':
+                        fk_time_id = get_or_create_time_id(timestamp=att, granularity=temporal_resolution)
+                        print('fk_time_id=', fk_time_id)
+                    elif name == 'timestamp':
+                        timestamp = datetime.fromtimestamp(att).strftime('%Y/%m/%d %H:%M:%S')
+                        fk_time_id = db.query(commit=True,
+                                              query="SELECT id FROM stat.time WHERE timestamp = '" + timestamp + "' AND granularity LIKE '" + temporal_resolution + "'")
+                        print('fk_time_id=', fk_time_id)
 
                 if valuesUnit and len(valuesUnit) > 0:
                     values.extend(valuesUnit)
 
-                values.append(start_date)
-                values.append(end_date)
+                if fk_gid:
+                    values.append(fk_gid)
+
+                if fk_time_id:
+                    values.append(fk_time_id)
+
+                #values.append(start_date)
+                #values.append(end_date)
+                # if fk_nuts_gid is not None and len(fk_nuts_gid) > 0:
+                #     values.append(fk_nuts_gid[0][0])
 
                 db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
                     map(str_with_quotes,
