@@ -349,6 +349,42 @@
               "utf-8"
             ]
           },
+          "spatial_resolution": {
+              "$id": "/properties/resources/items/properties/spatial_resolution",
+              "type": "string",
+              "title": "The Spatial resolution Schema",
+              "description": "An explanation about the purpose of this instance.",
+              "default": "",
+              "examples": [
+                "NUTS", "NUTS0", "LAU2", "LAU"
+              ],
+              "enum": [
+                "NUTS0", "NUTS1", "NUTS2", "NUTS3", "LAU1", "LAU2", "LAU3", "NUTS", "LAU"
+              ]
+          },
+          "temporal_resolution": {
+              "$id": "/properties/resources/items/properties/temporal_resolution",
+              "type": "string",
+              "title": "The temporal resolution Schema",
+              "description": "An explanation about the purpose of this instance.",
+              "default": "",
+              "examples": [
+                "hour", "year"
+              ],
+              "enum": [
+                "year", "month", "day", "hour", "week", "quarter"
+              ]
+          },
+          "spatial_key_field": {
+              "$id": "/properties/resources/items/properties/spatial_key_field",
+              "type": "string",
+              "title": "The spatial key field Schema",
+              "description": "Should contain the column/field containing the spatial key field. For instance the nuts_id column/field that refers to the nuts existing dataset",
+              "default": "",
+              "examples": [
+                "nuts_id", "NUTS0_code", "comm_id"
+              ],
+          },
           "schema": {
             "$id": "/properties/resources/items/properties/schema",
             "type": "object",
