@@ -383,7 +383,7 @@
               "default": "",
               "examples": [
                 "nuts_id", "NUTS0_code", "comm_id"
-              ],
+              ]
           },
           "schema": {
             "$id": "/properties/resources/items/properties/schema",
