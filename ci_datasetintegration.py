@@ -12,7 +12,7 @@ import logging
 import subprocess
 import csv
 from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, \
-    GEO_number_of_pyarmid_levels, GEO_user, GEO_password
+    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port
 from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
@@ -43,8 +43,9 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'electricity_emissions_hourly'
+repository_name = 'heat_res_curr_density'
 repository_path = os.path.join(repositories_base_path, repository_name)
+print(repository_path)
 
 # README
 # To test this script localy, run the following script before
@@ -200,7 +201,7 @@ for project in projects:
             print('successfuly cloned repository')
 
 """
-
+"""
 # Validate_Datapackage
 try:
     list_dirs = [name for name in os.listdir(GIT_base_path) if os.path.isdir(os.path.join(GIT_base_path, name))]
@@ -216,7 +217,7 @@ try:
 except Exception as e:
     logging.error(traceback.format_exc())
     sys.exit(1)
-
+"""
 # read datapackage.json (dp)
 try:
     dp = json.load(open(repository_path + '/datapackage.json'))
@@ -235,8 +236,8 @@ try:
         path = r['path']
         # date = r['date']
         raster_table_name = name.split('.')[0]
-        precomputed_table_name_lau = raster_table_name + "_" + lau_table_name + "_test"
-        precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name + "_test"
+        precomputed_table_name_lau = raster_table_name + "_" + lau_table_name 
+        precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name 
 
         if gis_data_type == 'vector-package':
             vector = r['vector']
@@ -317,14 +318,14 @@ try:
             os.environ['PGPASSWORD'] = DB_password
             os.environ['PGDATABASE'] = DB_database
 
-            cmds = 'cd git-repos/' + repository_name + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + stat_schema + '.' + name + ' | psql'
+            rast_tbl = geo_schema + '.' + raster_table_name
+
+            cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
             print(cmds)
             subprocess.call(cmds, shell=True)
 
             # Precompute layers for nuts and lau
             # LAU
-            # rast_tbl = geo_schema + "." + raster_table_name
-            rast_tbl = geo_schema + '.' + raster_table_name
             vect_tbl = "public." + lau_table_name
             vect_tbl_name = lau_table_name
             prec_tbl = stat_schema + '.' + precomputed_table_name_lau
@@ -401,7 +402,7 @@ try:
                                                          + query + ' ;')
 
             # build pyramid and add layer to geoserver
-            pyramid_path = os.path.join(GEO_base_path, name)
+            pyramid_path = os.path.join(GEO_base_path, rast_tbl)
 
             # build pyramid using gdal_retile script
             # todo: could improve by enabling "COMPRESS=JPEG" option, but doing so raised error
@@ -416,10 +417,11 @@ try:
             # add to geoserver
 
             workspace = 'hotmaps'
+            layer_name = rast_tbl
 
             # remove coverage store from geoserver
             response = requests.delete(
-                'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + name + '?recurse=true',
+                GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '?recurse=true',
                 auth=(GEO_user, GEO_password),
             )
             print(response)
@@ -432,11 +434,11 @@ try:
                                      '<workspace>hotmaps</workspace>' \
                                      '<enabled>true</enabled>' \
                                      '<type>ImagePyramid</type>' \
-                                     '<url>file:raster-layers/pop_tot_curr_density</url>' \
+                                     '<url>file:raster-layers/' + layer_name + '</url>' \
                                      '</coverageStore>'
 
             response = requests.post(
-                'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
+                GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
                 headers=headers,
                 data=data,
                 auth=(GEO_user, GEO_password),
@@ -446,13 +448,13 @@ try:
 
             # create layer
             data = '<coverage>' \
-                   '<name>' + name + '</name>' \
-                                     '<title>' + name + '</title>' \
+                   '<name>' + layer_name + '</name>' \
+                                     '<title>' + layer_name + '</title>' \
                                                         '<srs>EPSG:' + proj + '</srs>' \
                                                                               '</coverage>'
 
             response = requests.post(
-                'http://localhost:9090/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + name + '/coverages',
+                GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '/coverages',
                 headers=headers,
                 data=data,
                 auth=(GEO_user, GEO_password),

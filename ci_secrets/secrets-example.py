@@ -14,6 +14,8 @@ GIT_base_path = '/path/to/my/repos'
 
 # Geoserver layers
 GEO_base_path = '/path/to/my/layers'
+GEO_url = 'localhost'
+GEO_port = '8080'
 GEO_number_of_pyarmid_levels = 4
 GEO_user = 'admin'
 GEO_password = 'geoserver'
