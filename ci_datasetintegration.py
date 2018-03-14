@@ -297,7 +297,7 @@ try:
                             col_types=db_attributes_types, id_col_name='gid')
 
             # import shapefile
-            import_shapefile(os.path.join(base_path, 'git-repos', repository_name, path))
+            import_shapefile(os.path.join(repository_path, path))  # (base_path, 'git-repos', repository_name, path))
 
         elif gis_data_type == 'raster-data-resource':
             raster = r['raster']
@@ -310,7 +310,7 @@ try:
 
             # number_of_bands = raster['number_of_bands']
             # band0 = raster['band0']
-            raster_path = os.path.join(base_path, 'git-repos', repository_name, path)
+            raster_path = os.path.join(repository_path, path)  # (base_path, 'git-repos', repository_name, path)
 
             os.environ['PGHOST'] = DB_host
             os.environ['PGPORT'] = DB_port
@@ -322,8 +322,8 @@ try:
 
             cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
             print(cmds)
-            subprocess.call(cmds, shell=True)
-
+#            subprocess.call(cmds, shell=True)
+            """
             # Precompute layers for nuts and lau
             # LAU
             vect_tbl = "public." + lau_table_name
@@ -400,9 +400,10 @@ try:
                                                          + ' (' + ', '.join(
                 map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
                                                          + query + ' ;')
-
+            """
+            """
             # build pyramid and add layer to geoserver
-            pyramid_path = os.path.join(GEO_base_path, rast_tbl)
+            pyramid_path = os.path.join(GEO_base_path, raster_table_name)
 
             # build pyramid using gdal_retile script
             # todo: could improve by enabling "COMPRESS=JPEG" option, but doing so raised error
@@ -413,54 +414,54 @@ try:
                    '-targetDir ' + pyramid_path + ' ' + raster_path
             print(cmds)
             subprocess.call(cmds, shell=True)
-
+            """
             # add to geoserver
 
             workspace = 'hotmaps'
-            layer_name = rast_tbl
+            layer_name = raster_table_name
 
             # remove coverage store from geoserver
             response = requests.delete(
-                GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '?recurse=true',
+                'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '?recurse=true',
                 auth=(GEO_user, GEO_password),
             )
-            print(response)
+            print(response, response.content)
             # create data store
             headers = {
                 'Content-type': 'text/xml',
             }
             data = '<coverageStore>' \
-                   '<name>' + name + '</name>' \
-                                     '<workspace>hotmaps</workspace>' \
-                                     '<enabled>true</enabled>' \
-                                     '<type>ImagePyramid</type>' \
-                                     '<url>file:raster-layers/' + layer_name + '</url>' \
-                                     '</coverageStore>'
+                   '<name>' + layer_name + '</name>' \
+                   '<workspace>hotmaps</workspace>' \
+                   '<enabled>true</enabled>' \
+                   '<type>ImagePyramid</type>' \
+                   '<url>file:raster-layers/' + layer_name + '</url>' \
+                   '</coverageStore>'
 
             response = requests.post(
-                GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
+                'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
                 headers=headers,
                 data=data,
                 auth=(GEO_user, GEO_password),
             )
             # print(data)
-            print(response)
+            print(response, response.content)
 
             # create layer
             data = '<coverage>' \
                    '<name>' + layer_name + '</name>' \
-                                     '<title>' + layer_name + '</title>' \
-                                                        '<srs>EPSG:' + proj + '</srs>' \
-                                                                              '</coverage>'
+                   '<title>' + layer_name + '</title>' \
+                   '<srs>EPSG:' + proj + '</srs>' \
+                   '</coverage>'
 
             response = requests.post(
-                GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '/coverages',
+                'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '/coverages',
                 headers=headers,
                 data=data,
                 auth=(GEO_user, GEO_password),
             )
             # print(data)
-            print(response)
+            print(response, response.content)
 
         elif gis_data_type == 'tabular-data-resource':
             schema = r['schema']
