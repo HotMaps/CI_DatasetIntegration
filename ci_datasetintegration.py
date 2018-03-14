@@ -236,8 +236,8 @@ try:
         path = r['path']
         # date = r['date']
         raster_table_name = name.split('.')[0]
-        precomputed_table_name_lau = raster_table_name + "_" + lau_table_name 
-        precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name 
+        precomputed_table_name_lau = raster_table_name + "_" + lau_table_name
+        precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name
 
         if gis_data_type == 'vector-package':
             vector = r['vector']
@@ -322,8 +322,8 @@ try:
 
             cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
             print(cmds)
-#            subprocess.call(cmds, shell=True)
-            """
+            subprocess.call(cmds, shell=True)
+
             # Precompute layers for nuts and lau
             # LAU
             vect_tbl = "public." + lau_table_name
@@ -400,8 +400,7 @@ try:
                                                          + ' (' + ', '.join(
                 map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
                                                          + query + ' ;')
-            """
-            """
+
             # build pyramid and add layer to geoserver
             pyramid_path = os.path.join(GEO_base_path, raster_table_name)
 
@@ -414,7 +413,7 @@ try:
                    '-targetDir ' + pyramid_path + ' ' + raster_path
             print(cmds)
             subprocess.call(cmds, shell=True)
-            """
+
             # add to geoserver
 
             workspace = 'hotmaps'
