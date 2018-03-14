@@ -43,7 +43,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'heat_res_curr_density'
+repository_name = 'heat_nonres_curr_density'
 repository_path = os.path.join(repositories_base_path, repository_name)
 print(repository_path)
 
