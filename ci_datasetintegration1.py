@@ -43,7 +43,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'potential_municipal_solid_waste'
+repository_name = 'industrial_sites_Industrial_Database'
 repository_path = os.path.join(repositories_base_path, repository_name)
 print(repository_path)
 
@@ -72,7 +72,6 @@ def parse_date(str):
         except:
             pass
     raise ValueError('date format not supported! excpecting: ', '%Y/%m/%d %H:%M:%S', ' or ', '%Y-%m-%d %H:%M:%S')
-
 
 def get_or_create_time_id(timestamp, granularity):
     fk_time_id = db.query(commit=True,
@@ -611,13 +610,14 @@ try:
             finalPath = repository_path + '/' + path
 
             file = open(finalPath, "r")
-            reader = csv.DictReader(file)
+            dialect = csv.Sniffer().sniff(file.read(), delimiters=';,')
+            file.seek(0)
+            reader = csv.DictReader(file, dialect)
             fk_gid = None
             fk_time_id = None
 
             for row in reader:
                 values = []
-                skip = False
                 for name in attributes_names:
                     print(name)
                     att = row[name]
@@ -628,8 +628,6 @@ try:
                                           query="SELECT gid FROM geo.nuts WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
                         if fk_gid is not None and len(fk_gid) > 0 and len(fk_gid[0]) > 0:
                             fk_gid = fk_gid[0][0]
-                        else:
-                            skip = True
                         print('fk_gid=', fk_gid)
 
                     # handle temporal column
@@ -665,12 +663,11 @@ try:
                 #values.append(end_date)
                 # if fk_nuts_gid is not None and len(fk_nuts_gid) > 0:
                 #     values.append(fk_nuts_gid[0][0])
-                print(skip)
-                if not skip:
-                    db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
-                        map(str_with_quotes,
-                            [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
-                        map(str_with_single_quotes, values)) + ')')
+
+                db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
+                    map(str_with_quotes,
+                        [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
+                    map(str_with_single_quotes, values)) + ')')
         else:
             print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
 except Exception as e:
