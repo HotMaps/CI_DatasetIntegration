@@ -64,7 +64,6 @@ sudo docker run \
         -p 32768:5432 \
         -d hotmaps/postgis-database
 """
-
 def parse_date(str):
     for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S'):
         try:
@@ -265,7 +264,7 @@ try:
                 if col_type == 'string':
                     col_type = 'varchar(255)'
                 elif col_type == 'integer':
-                    col_type = 'bgint'
+                    col_type = 'bigint'
                 elif col_type == 'float':
                     col_type = 'numeric(20,2)'
                 elif col_type == 'boolean':
@@ -474,17 +473,39 @@ try:
             schema = r['schema']
 
             # retrieve start and end date
-            temp = r['temporal']
+            start_date = '1970-01-01 00:00:00'
+            end_date = '1970-01-01 00:00:00'
+
             try:
+                temp = r['temporal']
                 start_date = temp['start']
                 end_date = temp['end']
             except:
-                start_date = '1970-01-01 00:00:00'
-                end_date = '1970-01-01 00:00:00'
+                # keep default data
+                pass
+
+            # retrieve csv dialect
+            delimiter = ','
+            double_quote = True
+            #lineterminator = '\r\n'
+            try:
+                dialect = r['dialect']
+            except:
+                print('No dialect provided for this resource')
+            try:
+                delimiter = dialect['delimiter']
+            except:
+                print('No delimiter provided for this dialect')
+            try:
+                double_quote = dialect['doubleQuote']
+            except:
+                print('No doubleQuote provided for this dialect')
+            # lineterminator = dialect['lineterminator']
 
             fields = schema['fields']
 
             attributes_names = []
+            db_attributes_names = []
             attributes_types = []
             attributes_units = []
 
@@ -512,11 +533,14 @@ try:
                     print('Unhandled table type ', col_type)
                     break
 
-                attributes_names.append(att['name'])
+                col_name = att['name']
+                attributes_names.append(col_name)
+                col_name = col_name.replace('-', '_')
+                db_attributes_names.append(col_name)
                 attributes_types.append(col_type)
                 attributes_units.append(att['unit'])
 
-            db_attributes_names = list(attributes_names)
+            #db_attributes_names = list(attributes_names)
             db_attributes_types = list(attributes_types)
 
             valuesUnit = []
@@ -524,7 +548,7 @@ try:
             valuesUnitType = []
             for i in range(0, len(attributes_names)):
                 if attributes_units[i] and attributes_units[i] != "":
-                    valuesUnitName.append(attributes_names[i] + "_unit")
+                    valuesUnitName.append(db_attributes_names[i] + "_unit")
                     valuesUnit.append(attributes_units[i])
                     valuesUnitType.append("varchar(255)")
 
@@ -543,18 +567,19 @@ try:
             # TODO : Handle LAU/Nuts difference (use the spatial_resolution)
             # spatial resolution
             spatial_table = None
+            spatial_resolution = None
+            spatial_field_name = None
+
             try:
                 spatial_resolution = r['spatial_resolution']
                 spatial_field_name = r['spatial_key_field']
             except:
                 print('No spatial field/resolution specified in datapackage.json')
-                spatial_resolution = None
-                spatial_field_name = None
 
-            if spatial_resolution.lower().startswith("nuts"):
+            if spatial_resolution and spatial_resolution.lower().startswith("nuts"):
                 spatial_table_name = nuts_table_name
                 spatial_table = nuts_table
-            elif spatial_resolution.lower().startswith("lau"):
+            elif spatial_resolution and spatial_resolution.lower().startswith("lau"):
                 spatial_table_name = lau_table_name
                 spatial_table = lau_table
 
@@ -572,7 +597,7 @@ try:
                 temporal_resolution = 'day'
             elif tr.lower().startswith('hour'):
                 temporal_resolution = 'hour'
-            elif tr.lower().stvaluesUnitartswith('minute'):
+            elif tr.lower().startswith('minute'):
                 temporal_resolution = 'minute'
             elif tr.lower().startswith('second'):
                 temporal_resolution = 'second'
@@ -610,17 +635,19 @@ try:
             finalPath = repository_path + '/' + path
 
             file = open(finalPath, "r")
-            dialect = csv.Sniffer().sniff(file.read(), delimiters=';,')
-            file.seek(0)
-            reader = csv.DictReader(file, dialect)
+            csv.register_dialect('custom', delimiter=delimiter, doublequote=double_quote) # lineterminator=lineterminator
+            reader = csv.DictReader(f=file, dialect='custom')
+
             fk_gid = None
             fk_time_id = None
 
             for row in reader:
                 values = []
                 for name in attributes_names:
-                    print(name)
-                    att = row[name]
+                    try:
+                        att = row[name]
+                    except:
+                        continue
 
                     # handle spatial column
                     if name == spatial_field_name:
@@ -633,7 +660,7 @@ try:
                     # handle temporal column
                     if name == 'datetime':
                         fk_time_id = get_or_create_time_id(timestamp=att, granularity=temporal_resolution)
-                        print('fk_time_id=', fk_time_id)
+                        print('fk_timdouble_quotese_id=', fk_time_id)
                     elif name == 'timestamp':
                         timestamp = datetime.fromtimestamp(att).strftime('%Y/%m/%d %H:%M:%S')
                         fk_time_id = db.query(commit=True,
@@ -643,6 +670,8 @@ try:
                     elif name == 'geometry' or name == 'geom':
                         att = 'ST_GeomFromEWKT(\'' + att + '\')'
 
+                    if att == '':
+                        att = None
                     values.append(att)
 
                 # get year if no timestamp specified
@@ -663,11 +692,18 @@ try:
                 #values.append(end_date)
                 # if fk_nuts_gid is not None and len(fk_nuts_gid) > 0:
                 #     values.append(fk_nuts_gid[0][0])
+                if len(db_attributes_names) != len(db_attributes_types) or len(db_attributes_names) != len(values):
+                    print('column names, types or values don\'t match.')
+                    print(db_attributes_names, len(db_attributes_names))
+                    print(db_attributes_types, len(db_attributes_types))
+                    print(values, len(values))
+                    sys.exit(1)
 
-                db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
-                    map(str_with_quotes,
-                        [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
-                    map(str_with_single_quotes, values)) + ')')
+                db.insert(commit=True, table=stat_schema + '.' + table_name, columns=db_attributes_names, types=db_attributes_types, values=values)
+                #db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
+                #    map(str_with_quotes,
+                #        [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
+                #    map(str_with_single_quotes, values)) + ')')
         else:
             print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
 except Exception as e:
