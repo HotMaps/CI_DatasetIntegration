@@ -20,6 +20,7 @@ import requests
 import gitlab
 import logging
 
+
 logging.basicConfig(level=logging.INFO)
 
 # schemas
@@ -667,9 +668,6 @@ try:
                                               query="SELECT id FROM stat.time WHERE timestamp = '" + timestamp + "' AND granularity LIKE '" + temporal_resolution + "'")
                         print('fk_time_id=', fk_time_id)
 
-                    elif name == 'geometry' or name == 'geom':
-                        att = 'ST_GeomFromEWKT(\'' + att + '\')'
-
                     if att == '':
                         att = None
                     values.append(att)
@@ -692,13 +690,6 @@ try:
                 #values.append(end_date)
                 # if fk_nuts_gid is not None and len(fk_nuts_gid) > 0:
                 #     values.append(fk_nuts_gid[0][0])
-                if len(db_attributes_names) != len(db_attributes_types) or len(db_attributes_names) != len(values):
-                    print('column names, types or values don\'t match.')
-                    print(db_attributes_names, len(db_attributes_names))
-                    print(db_attributes_types, len(db_attributes_types))
-                    print(values, len(values))
-                    sys.exit(1)
-
                 db.insert(commit=True, table=stat_schema + '.' + table_name, columns=db_attributes_names, types=db_attributes_types, values=values)
                 #db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
                 #    map(str_with_quotes,

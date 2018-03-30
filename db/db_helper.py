@@ -53,7 +53,6 @@ class DB(object):
             if commit:
                 self.conn.commit()
             return cursor.fetchall()
-            sys.exit(1)
         except psycopg2.Error as e:
             print(e)
             return None
@@ -76,10 +75,10 @@ class DB(object):
         for i, val in enumerate(values):
             if i > 0:
                 query = query + ", "
-            if types[i].startswith('varchar') or types[i] == 'datetime':
+            if types[i].startswith('varchar') or types[i] == 'datetime' or types[i].startswith('numeric') or types[i] == 'bigint' or types[i] == 'boolean' or types[i] == 'timestamp':
                 query = query + "%s"
-            elif types[i].startswith('numeric') or types[i] == 'geometry' or types[i] == 'bigint' or types[i] == 'boolean' or types[i] == 'timestamp':
-                query = query + "%s"
+            elif types[i] == 'geometry':
+                query = query + "ST_GeomFromEWKT(%s)"
         query = query + ') '
         return self.query(query=query, data=values, commit=commit, notices=notices)
 
