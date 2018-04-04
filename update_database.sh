@@ -1,8 +1,8 @@
 #!/bin/bash
 
-pip install -r requirements.txt
+#pip install -r requirements.txt
 
-sudo apt-get install python-numpy libgdal1h gdal-bin libgdal-dev
+# sudo apt-get install python-numpy libgdal1h gdal-bin libgdal-dev
 
 array[1]="heat_res_curr_density"
 array[2]="heat_nonres_curr_density"
@@ -25,6 +25,8 @@ array[15]="potential_shallowgeothermal"
 
 for element in ${array[@]}
 do
+    echo  "Start integration of" $element
     python3 ci_run_dataset_integration.py $element
+    echo   $element "was integrated"
 done
 
