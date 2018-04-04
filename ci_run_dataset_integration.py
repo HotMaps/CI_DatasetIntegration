@@ -3,8 +3,7 @@ import sys
 import json
 from pprint import pprint
 import os.path
-import git
-from git import Repo
+
 from datetime import date, datetime, timedelta
 import osgeo.ogr
 import traceback
@@ -14,10 +13,9 @@ import csv
 from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, \
     GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port
 from db import db_helper
-import validate_datapackage
+
 from db.db_helper import str_with_quotes, str_with_single_quotes
-import requests
-import gitlab
+
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -43,7 +41,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'potential_municipal_solid_waste'
+repository_name = sys.argv[0]
 repository_path = os.path.join(repositories_base_path, repository_name)
 print(repository_path)
 

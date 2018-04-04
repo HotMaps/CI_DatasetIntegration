@@ -1,9 +1,10 @@
 # dependencies :
 # sudo apt-get install python-numpy libgdal1h gdal-bin libgdal-dev
 
-
+gitpython
 #rasterstats
+gitpython
 jsonschema
 psycopg2
 python-gitlab
-gitpython
+
