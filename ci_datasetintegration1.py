@@ -44,7 +44,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'industrial_sites_Industrial_Database'
+repository_name = 'potential_municipal_solid_waste'
 repository_path = os.path.join(repositories_base_path, repository_name)
 print(repository_path)
 
@@ -644,11 +644,19 @@ try:
 
             for row in reader:
                 values = []
+                skip = False
+                i = 0  # index
                 for name in attributes_names:
                     try:
                         att = row[name]
                     except:
                         continue
+
+                    # check type
+                    type = db_attributes_types[i]
+                    if type == 'bigint' or type.startswith('numeric'):
+                        if isinstance(att, str):
+                            att = None
 
                     # handle spatial column
                     if name == spatial_field_name:
@@ -656,6 +664,11 @@ try:
                                           query="SELECT gid FROM geo.nuts WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
                         if fk_gid is not None and len(fk_gid) > 0 and len(fk_gid[0]) > 0:
                             fk_gid = fk_gid[0][0]
+                        else:
+                            print("No geometry found for reference: " + att + ". Skipping.")
+                            skip = True
+                            break  # skip row
+
                         print('fk_gid=', fk_gid)
 
                     # handle temporal column
@@ -671,6 +684,11 @@ try:
                     if att == '':
                         att = None
                     values.append(att)
+
+                    i = i + 1  # increment index
+
+                if skip:
+                    continue
 
                 # get year if no timestamp specified
                 if fk_time_id is None:

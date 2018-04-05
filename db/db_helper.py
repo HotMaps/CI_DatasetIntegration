@@ -52,10 +52,16 @@ class DB(object):
                 pprint(self.conn.notices)
             if commit:
                 self.conn.commit()
-            return cursor.fetchall()
+
+            if cursor.description:
+                return cursor.fetchall()
+            else:
+                return None
+
         except psycopg2.Error as e:
             print(e)
-            return None
+            self.close_connection()
+            sys.exit(1)
 
     def insert(self, table, columns, types, values, commit=False, notices=False):
         # check lenght of parameters
