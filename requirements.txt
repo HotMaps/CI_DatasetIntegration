@@ -7,3 +7,4 @@ jsonschema
 psycopg2
 python-gitlab
 gitpython
+shapely

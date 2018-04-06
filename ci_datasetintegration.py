@@ -44,7 +44,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'potential_municipal_solid_waste'
+repository_name = 'potential_solar'
 repository_path = os.path.join(repositories_base_path, repository_name)
 print(repository_path)
 
@@ -254,9 +254,16 @@ try:
             schema = vector['schema']
 
             # retrieve start and end date
-            temp = r['temporal']
-            start_date = temp['start']
-            end_date = temp['end']
+            start_date = '1970-01-01 00:00:00'
+            end_date = '1970-01-01 00:00:00'
+
+            try:
+                temp = r['temporal']
+                start_date = temp['start']
+                end_date = temp['end']
+            except:
+                # keep default data
+                pass
 
             attributes_names = []
             attributes_types = []
@@ -312,9 +319,16 @@ try:
             proj = raster['epsg']
 
             # retrieve start and end date
-            temp = r['temporal']
-            start_date = temp['start']
-            end_date = temp['end']
+            start_date = '1970-01-01 00:00:00'
+            end_date = '1970-01-01 00:00:00'
+
+            try:
+                temp = r['temporal']
+                start_date = temp['start']
+                end_date = temp['end']
+            except:
+                # keep default data
+                pass
 
             # number_of_bands = raster['number_of_bands']
             # band0 = raster['band0']
@@ -328,7 +342,8 @@ try:
 
             rast_tbl = geo_schema + '.' + raster_table_name
 
-            cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
+            #cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
+            cmds = 'raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + raster_path + '" ' + rast_tbl + ' | psql'
             print(cmds)
             subprocess.call(cmds, shell=True)
 
@@ -656,7 +671,8 @@ try:
                     type = db_attributes_types[i]
                     if type == 'bigint' or type.startswith('numeric'):
                         if isinstance(att, str):
-                            att = None
+                            #att = None
+                            pass
 
                     # handle spatial column
                     if name == spatial_field_name:
