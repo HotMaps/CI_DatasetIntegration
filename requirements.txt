@@ -1,5 +1,5 @@
 # dependencies :
-# sudo apt-get install python-numpy libgdal1h gdal-bin libgdal-dev
+# sudo apt-get install python-numpy  gdal-bin libgdal-dev
 
 gitpython
 #rasterstats

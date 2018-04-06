@@ -2,3 +2,8 @@ ci_secrets/secrets.py
 git-repos
 .idea
 __pycache__
+ci_secrets/__init__.pyc
+ci_secrets/secrets.pyc
+
+db/__init__.pyc
+db/db_helper.pyc

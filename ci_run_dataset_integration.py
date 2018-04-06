@@ -155,7 +155,9 @@ def import_shapefile(src_file, date):
         values.append(date)
 
         db.query(commit=True,
-                 query='INSERT INTO ' + geo_schema + '.' + table_name
+                 query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
+                       ' SET sequence_range TO 1;'
+                       +' INSERT INTO ' + geo_schema + '.' + table_name
                        + ' (' + ', '.join(
                      map(db_helper.str_with_quotes, [x.lower() for x in db_attributes_names])) + ')'
                        + ' VALUES ('

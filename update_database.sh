@@ -26,7 +26,7 @@ array[15]="potential_shallowgeothermal"
 for element in ${array[@]}
 do
     echo  "Start integration of" $element
-    python3 ci_run_dataset_integration.py $element
+    python ci_run_dataset_integration.py $element
     echo   $element "was integrated"
 done
 
