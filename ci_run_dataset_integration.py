@@ -120,9 +120,7 @@ def get_or_create_time_id(timestamp, granularity):
         time_attributes.append(granularity)
 
         fk_time_id = db.query(commit=True,
-                 query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
-                       ' SET sequence_range TO 1;'
-                       +'INSERT INTO ' + time_table +
+                 query='INSERT INTO ' + time_table +
                        ' (timestamp, year, month, day, weekday, season, hour_of_day, hour_of_year, date, granularity) ' +
                        'VALUES (' + ', '.join(map(str_with_single_quotes, time_attributes)) + ') RETURNING id')
 
@@ -157,9 +155,7 @@ def import_shapefile(src_file, date):
         values.append(date)
 
         db.query(commit=True,
-                 query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
-                       ' SET sequence_range TO 1;'
-                       +' INSERT INTO ' + geo_schema + '.' + table_name
+                 query='INSERT INTO ' + geo_schema + '.' + table_name
                        + ' (' + ', '.join(
                      map(db_helper.str_with_quotes, [x.lower() for x in db_attributes_names])) + ')'
                        + ' VALUES ('
@@ -167,6 +163,12 @@ def import_shapefile(src_file, date):
                        + ', ST_GeomFromText(\'' + wkt + '\', ' + str(proj) + ')'
                        + ')'
                  )
+def insert_precompute(table_name, prec_tbl, attributes_names, db, query):
+    db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
+                                                 + ' (' + ', '.join(
+        map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
+                                                 + query + ' ;')
+
 
 
 # git pull
@@ -369,13 +371,16 @@ try:
                     + ") " \
                     + ").*, " + vect_tbl + ".comm_id, " + vect_tbl + ".gid " \
                     + "FROM " + vect_tbl + " "
-
-            db.query(commit=True, notices=verbose, query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
+            # add in new thread
+            """db.query(commit=True, notices=verbose, query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
                                                          ' SET sequence_range TO 1;'
                                                          +'INSERT INTO ' + prec_tbl
                                                          + ' (' + ', '.join(
                 map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
-                                                         + query + ' ;')
+                                                         + query + ' ;')"""
+            t = threading.Thread(target=insert_precompute,name='1',args=(table_name, prec_tbl, attributes_names, db, query))
+            t.daemon = True
+            t.start() #< This actually starts the thread execution in the background
 
             # NUTS
             vect_tbl = geo_schema + '.' + nuts_table_name
@@ -410,12 +415,16 @@ try:
                     + ").*, " + vect_tbl + ".nuts_id, " + vect_tbl + ".gid " \
                     + "FROM " + vect_tbl + " "
 
-            db.query(commit=True, notices=verbose, query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
+            """db.query(commit=True, notices=verbose, query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
                                                          ' SET sequence_range TO 1;'
                                                          +'INSERT INTO ' + prec_tbl
                                                          + ' (' + ', '.join(
                 map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
-                                                         + query + ' ;')
+                                                         + query + ' ;')"""
+
+            t = threading.Thread(target=insert_precompute,name='2',args=(table_name, prec_tbl, attributes_names, db, query))
+            t.daemon = True
+            t.start() #< This actually starts the thread execution in the background
 
             # build pyramid and add layer to geoserver
             pyramid_path = os.path.join(GEO_base_path, raster_table_name)
@@ -674,9 +683,7 @@ try:
                 #     values.append(fk_nuts_gid[0][0])
                 print(skip)
                 if not skip:
-                    db.query(commit=True, query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
-                                                ' SET sequence_range TO 1;'
-                                                +'INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
+                    db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
                         map(str_with_quotes,
                             [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
                         map(str_with_single_quotes, values)) + ')')
