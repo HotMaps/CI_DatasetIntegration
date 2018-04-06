@@ -3,7 +3,7 @@ import sys
 import json
 from pprint import pprint
 import os.path
-
+import threading
 from datetime import date, datetime, timedelta
 import osgeo.ogr
 import traceback
@@ -120,7 +120,9 @@ def get_or_create_time_id(timestamp, granularity):
         time_attributes.append(granularity)
 
         fk_time_id = db.query(commit=True,
-                 query='INSERT INTO ' + time_table +
+                 query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
+                       ' SET sequence_range TO 1;'
+                       +'INSERT INTO ' + time_table +
                        ' (timestamp, year, month, day, weekday, season, hour_of_day, hour_of_year, date, granularity) ' +
                        'VALUES (' + ', '.join(map(str_with_single_quotes, time_attributes)) + ') RETURNING id')
 
@@ -368,7 +370,9 @@ try:
                     + ").*, " + vect_tbl + ".comm_id, " + vect_tbl + ".gid " \
                     + "FROM " + vect_tbl + " "
 
-            db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
+            db.query(commit=True, notices=verbose, query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
+                                                         ' SET sequence_range TO 1;'
+                                                         +'INSERT INTO ' + prec_tbl
                                                          + ' (' + ', '.join(
                 map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
                                                          + query + ' ;')
@@ -406,7 +410,9 @@ try:
                     + ").*, " + vect_tbl + ".nuts_id, " + vect_tbl + ".gid " \
                     + "FROM " + vect_tbl + " "
 
-            db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
+            db.query(commit=True, notices=verbose, query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
+                                                         ' SET sequence_range TO 1;'
+                                                         +'INSERT INTO ' + prec_tbl
                                                          + ' (' + ', '.join(
                 map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
                                                          + query + ' ;')
@@ -668,7 +674,9 @@ try:
                 #     values.append(fk_nuts_gid[0][0])
                 print(skip)
                 if not skip:
-                    db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
+                    db.query(commit=True, query='ALTER SEQUENCE'+ geo_schema + '.' + table_name + ';' +
+                                                ' SET sequence_range TO 1;'
+                                                +'INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
                         map(str_with_quotes,
                             [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
                         map(str_with_single_quotes, values)) + ')')
