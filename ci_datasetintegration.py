@@ -44,7 +44,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'potential_solar'
+repository_name = sys.argv[1]
 repository_path = os.path.join(repositories_base_path, repository_name)
 print(repository_path)
 
