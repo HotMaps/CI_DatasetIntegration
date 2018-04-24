@@ -30,6 +30,7 @@ for project in projects:
         repository_name = proj.name
         repository_path = os.path.join(repositories_base_path, repository_name)
         print(repository_name)
+
         if os.path.exists(repository_path):
             # git pull
             print('update repository')
@@ -40,6 +41,7 @@ for project in projects:
         else:
             # git clone
             print('clone repository')
-            url = proj.ssh_url_to_repo
+            url = proj.http_url_to_repo
+            print(url)
             Repo.clone_from(url, repository_path)
             print('successfuly cloned repository')
