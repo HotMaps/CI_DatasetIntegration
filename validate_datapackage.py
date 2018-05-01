@@ -36,12 +36,12 @@ def validate_datapackage(file_path):
     try:
         if not os.path.exists(file_path):
             _print("datapackage.json file missing. Please make sure to place it at root of repository.", bcolors.FAIL)
-            return
+            return False
 
         dp = json.load(open(file_path))
         if not 'profile' in dp:
             _print("datapackage.json file missing 'profile' attribute", bcolors.FAIL)
-            return
+            return False
 
         profile = dp['profile']
         schema = None
@@ -58,7 +58,7 @@ def validate_datapackage(file_path):
         else:
             _print('\'profile\' contains an unsupported value! Use only vector-data-resource, raster-data-resource or '
                   'tabular-data-resource', bcolors.FAIL)
-            return
+            return False
 
         # validate json
         v = jsonschema.Draft4Validator(schema)
@@ -67,12 +67,14 @@ def validate_datapackage(file_path):
 
         if jsonschema.Draft4Validator(schema).is_valid(dp):
             _print('datapackage.json is OK.', bcolors.OKGREEN)
+            return True
         else:
             _print('datapackage.json is not OK! Please check the file again.', bcolors.FAIL)
+            return False
 
     except Exception as e:
         _print(str(e), bcolors.FAIL)
-        return
+        return False
 
 # list_dirs = [name for name in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, name))]
 # list_dirs = sorted(list_dirs)

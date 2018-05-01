@@ -10,9 +10,9 @@ repository_name = ''
 repository_path = os.path.join(repositories_base_path, repository_name)
 
 # check repository on gitlab
-# date = datetime.datetime.utcnow()-datetime.timedelta(days=1)
+#date = datetime.datetime.utcnow()-datetime.timedelta(days=1)
 date = datetime.datetime(2010, 1, 1, 0, 0, 0)
-dateStr = date.isoformat(sep='T', timespec='seconds')+'Z'
+dateStr = date.isoformat(sep='T')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token='f-JzjmRRnxzwqC5o3zsQ')
 
 group = gl.groups.get('1354895')
