@@ -12,15 +12,19 @@ import logging
 import subprocess
 import csv
 from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, \
-    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port
+    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port, TAIGA_token, GIT_token
 from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
 import requests
 import gitlab
 import logging
+from taiga import TaigaAPI
+from taiga.exceptions import TaigaException
 
 
+taiga_api = TaigaAPI(token=TAIGA_token)
+taiga_project = taiga_api.projects.get_by_slug('widmont-hotmaps')
 logging.basicConfig(level=logging.INFO)
 
 # schemas
@@ -44,7 +48,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = ''
+repository_name = 'scen_current_building_demand_csv'
 listOfRepositories = []
 repository_path = os.path.join(repositories_base_path, repository_name)
 print(repository_path)
@@ -66,6 +70,16 @@ sudo docker run \
         -p 32768:5432 \
         -d hotmaps/postgis-database
 """
+def post_issue(name, description):
+    issue = taiga_project.add_issue(
+        name,
+        project.priorities.get(name='Workaround possible - Low').id,
+        project.issue_statuses.get(name='New').id,
+        project.issue_types.get(name='Dataset integration').id,
+        project.severities.get(name='Minor').id,
+        description=description
+    )
+
 def parse_date(str):
     for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S'):
         try:
@@ -170,16 +184,15 @@ def import_shapefile(src_file, date):
 # g = git.cmd.Git(g_dir)
 # g.pull()
 
-# connect to database
+# connect to databaselistOfRepositories
 db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
 verbose = True
 
 # check repository on gitlab
 
-#repo_date = datetime.utcnow()-timedelta(days=1)
-repo_date = datetime(2010, 1, 1, 0, 0, 0)
-dateStr = repo_date.isoformat(sep='T')+'Z'
-gl = gitlab.Gitlab('https://gitlab.com', private_token='f-JzjmRRnxzwqC5o3zsQ')
+#repo_date = datetime.utcnow()-timedelta(days=1)  #permet de récupérer les datasats des 24 dernières heures
+repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets. dateStr = repo_date.isoformat(sep='T')+'Z'
+gl = gitlab.Gitlab('https://gitlab.com', private_token=GIT_token)
 
 group = gl.groups.get('1354895')
 
@@ -214,12 +227,14 @@ for project in projects:
                 print('successfuly cloned repository')
         except:
             print('No datapackage.json or in a wrong place')
+            post_issue(name='Validation failed - repository ' + repository_name,
+                       description='No file "datapackage.json" at the root of the repository. Please check that the file is present and in the correct directory (root).')
 
 
-listOfRepositories.append('.git')
+#listOfRepositories.append('.git')
 
 # Validate_Datapackage
-
+listOfRepositories
 try:
     list_dirs = [name for name in os.listdir(GIT_base_path) if os.path.isdir(os.path.join(GIT_base_path, name))]
     list_dirs = sorted(list_dirs)
@@ -234,20 +249,21 @@ try:
         if validate_datapackage.validate_datapackage(d_file_path) == False:
             print(d + ' has been removed')
             listOfRepositories.remove(d)
+            post_issue(name='Validation failed - repository ' + repository_name,
+                       description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
 
 except Exception as e:
     logging.error(traceback.format_exc())
-    sys.exit(1)
 
-listOfRepositories.remove('temperature_profile_daily_avg_household_yearlong_2010')
-listOfRepositories.remove('temperature_profile_daily_avg_industry_yearlong_2010')
-listOfRepositories.remove('scen_ambitious_building_demand')
+#listOfRepositories.remove('temperature_profile_daily_avg_household_yearlong_2010')
+#listOfRepositories.remove('temperature_profile_daily_avg_industry_yearlong_2010')
+#listOfRepositories.remove('scen_ambitious_building_demand')
 
-    # read datapackage.json (dp)
 for repository_name in listOfRepositories:
     repository_path = os.path.join(repositories_base_path, repository_name)
 
     try:
+        # read datapackage.json (dp)
         print(repository_path)
         dp = json.load(open(repository_path + '/datapackage.json'))
 
@@ -334,7 +350,46 @@ for repository_name in listOfRepositories:
                                 col_types=db_attributes_types, id_col_name='gid')
 
                 # import shapefile
-                import_shapefile(os.path.join(repository_path, path))  # (base_path, 'git-repos', repository_name, path))
+                import_shapefile(os.path.join(repository_path, path), start_date)  # (base_path, 'git-repos', repository_name, path))
+
+                # add to geoserver
+                workspace = 'hotmaps'
+                store = 'hotmapsdb'
+                layer_name = table_name
+
+                # remove previous layer from geoserver
+                # remove layer
+                response = requests.delete(
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                    auth=(GEO_user, GEO_password),
+                )
+                print(response, response.content)
+
+                # remove feature type
+                response = requests.delete(
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                    auth=(GEO_user, GEO_password),
+                )
+                print(response, response.content)
+
+                # create layer
+                headers = {
+                    'Content-type': 'text/xml',
+                }
+                data = '<featureType>' \
+                       + '<name>' + layer_name + '</name>' \
+                       + '<title>' + layer_name + '</title>' \
+                       + '<srs>EPSG:' + proj + '</srs>' \
+                       + '</featureType>'
+
+                response = requests.post(
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                    headers=headers,
+                    data=data,
+                    auth=(GEO_user, GEO_password),
+                )
+                print(data)
+                print(response, response.content)
 
             elif gis_data_type == 'raster-data-resource':
                 raster = r['raster']
@@ -522,6 +577,9 @@ for repository_name in listOfRepositories:
                     # keep default data
                     pass
 
+                # file path
+                tabular_file_path = repository_path + '/' + path
+
                 # retrieve csv dialect
                 delimiter = ','
                 double_quote = True
@@ -547,6 +605,8 @@ for repository_name in listOfRepositories:
                 attributes_types = []
                 attributes_units = []
 
+                count_geom_cols = 0
+
                 for att in fields:
                     col_type = att['type']
                     if col_type == 'string':
@@ -567,6 +627,7 @@ for repository_name in listOfRepositories:
                         col_type = 'timestamp'
                     elif col_type == 'geom' or col_type == 'geometry':
                         col_type = 'geometry'
+                        count_geom_cols = count_geom_cols + 1
                     else:
                         print('Unhandled table type ', col_type)
                         break
@@ -590,7 +651,7 @@ for repository_name in listOfRepositories:
                         valuesUnit.append(attributes_units[i])
                         valuesUnitType.append("varchar(255)")
 
-                if valuesUnit and len(valuesUnit) > 0:
+                if valuesUnit and len(valueyou dsUnit) > 0:
                     db_attributes_names.extend(valuesUnitName)
                     db_attributes_types.extend(valuesUnitType)
 
@@ -608,24 +669,43 @@ for repository_name in listOfRepositories:
                 spatial_resolution = None
                 spatial_field_name = None
 
+                missing_geometry = False
                 try:
                     spatial_resolution = r['spatial_resolution']
                     spatial_field_name = r['spatial_key_field']
+
+                    missing_geometry = spatial_resolution.lower() == 'none' and count_geom_cols <= 0
+
                 except:
                     print('No spatial field/resolution specified in datapackage.json')
+                    missing_geometry = count_geom_cols <= 0:
+                    # with open(tabular_file_path, "rb") as f:
+                    #     reader = csv.reader(f)
+                    #     column_names = next(reader)
+
+                if missing_geometry:
+                    print('No spatial reference or geometry provided. The dataset must contain at least one geolocalized data.')
+                    post_issue(name='Integration of resource failed - repository ' + repository_name,
+                               description='No spatial reference or geometry provided for resource "' + name + '". The resource has been skipped.'
+                                         + 'The dataset must contain at least one geolocalized data (geometry or reference to spatial resolutions (NUTS/LAU)). '
+                                         + 'Make sure that the geometry column is of type "geometry" or that "spatial_resolution" and "spatial_key_field" attributes are correctly declared in the "datapackage.json" file')
+                    continue
 
                 if spatial_resolution and spatial_resolution.lower().startswith("nuts"):
                     spatial_table_name = nuts_table_name
                     spatial_table = nuts_table
+                    spatial_type = 'N'
                 elif spatial_resolution and spatial_resolution.lower().startswith("lau"):
                     spatial_table_name = lau_table_name
                     spatial_table = lau_table
+                    spatial_type = 'L'
 
                 # temporal resolution
                 temporal_resolution = ''
                 try:
                     tr = r['temporal_resolution']
                 except:
+                    print('Missing attribute temporal_resolution in datapackage.json. Using year as default')
                     tr = 'year'
                 if tr.lower().startswith('year'):
                     temporal_resolution = 'year'
@@ -670,26 +750,25 @@ for repository_name in listOfRepositories:
                 db.create_table(table_name=stat_schema + '.' + table_name, col_names=db_attributes_names,
                                 col_types=db_attributes_types, id_col_name='id', constraints_str=constraints)
 
-                finalPath = repository_path + '/' + path
 
-                file = open(finalPath, "r")
+                file = open(tabular_file_path, "r")
                 csv.register_dialect('custom', delimiter=delimiter, doublequote=double_quote) # lineterminator=lineterminator
                 reader = csv.DictReader(f=file, dialect='custom')
-
-                fk_gid = None
-                fk_time_id = None
 
                 for row in reader:
                     values = []
                     skip = False
                     i = 0  # index
+                    fk_gid = None
+                    fk_time_id = None
+
                     for name in attributes_names:
                         try:
                             att = row[name]
                         except:
                             continue
 
-                        # check typede
+                        # check type
                         type = db_attributes_types[i]
                         if type == 'bigint' or type.startswith('numeric'):
                             if isinstance(att, str):
@@ -698,14 +777,19 @@ for repository_name in listOfRepositories:
 
                         # handle spatial column
                         if name == spatial_field_name:
-                            fk_gid = db.query(commit=True,
-                                              query="SELECT gid FROM geo.nuts WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
+                            # nuts
+                            if spatial_type == 'N':  # NUTS
+                                fk_gid = db.query(commit=True,
+                                                  query="SELECT gid FROM " + spatial_table + " WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
+                            elif spatial_type == 'L':  # LAU
+                                fk_gid = db.query(commit=True,
+                                                  query="SELECT gid FROM " + spatial_table + " WHERE comm_id LIKE '" + att + "'")
+
                             if fk_gid is not None and len(fk_gid) > 0 and len(fk_gid[0]) > 0:
                                 fk_gid = fk_gid[0][0]
                             else:
                                 print("No geometry found for reference: " + att + ". Skipping.")
                                 skip = True
-                                break  # skip row
 
                             print('fk_gid=', fk_gid)
 
@@ -751,10 +835,76 @@ for repository_name in listOfRepositories:
                     #    map(str_with_quotes,
                     #        [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
                     #    map(str_with_single_quotes, values)) + ')')
+
+                    # create view for Geoserver (if contains geometries / or refs to existing geometries)
+                    if fk_time_id:
+                        time_cols = ', ' + time_table_name + '.timestamp'
+                        time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
+                                    'ON (' + table_name + '.fk_time_id = ' + time_table_name + '.id)'
+                    else:
+                        time_cols = ''
+                        time_join = ''
+
+                    if fk_gid:
+                        geom_cols = ', ' + spatial_table_name + '.*'
+                        geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
+                                    'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.id)'
+                    else:
+                        geom_cols = ''
+                        geom_join = ''
+
+                    query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
+                            'AS SELECT ' + table_name + '.*' + time_cols + geom_cols + ' ' + \
+                            'FROM ' + stat_schema + '.' + table_name + \
+                            time_join + geom_join + \
+                            ';'
+
+                    # add to database
+                    db.query(commit=True, query=query)
+
+                    # add to geoserver
+                    workspace = 'hotmaps'
+                    store = 'hotmapsdb'
+                    layer_name = table_name + '_view'
+
+                    # remove previous layer from geoserver
+                    # remove layer
+                    response = requests.delete(
+                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                        auth=(GEO_user, GEO_password),
+                    )
+                    print(response, response.content)
+
+                    # remove feature type
+                    response = requests.delete(
+                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                        auth=(GEO_user, GEO_password),
+                    )
+                    print(response, response.content)
+
+                    # create layer
+                    headers = {
+                        'Content-type': 'text/xml',
+                    }
+                    data = '<featureType>' \
+                           + '<name>' + layer_name + '</name>' \
+                           + '<title>' + layer_name + '</title>' \
+                           + '</featureType>'
+
+                    response = requests.post(
+                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                        headers=headers,
+                        data=data,
+                        auth=(GEO_user, GEO_password),
+                    )
+                    print(data)
+                    print(response, response.content)
+
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
     except Exception as e:
         logging.error(traceback.format_exc())
-        sys.exit(1)
+        post_issue(name='Integration failed - repository ' + repository_name,
+                   description='A problem occurred during the integration process of the repository. Please contact the development team.')
 
 db.close_connection()
