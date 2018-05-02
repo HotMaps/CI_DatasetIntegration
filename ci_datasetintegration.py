@@ -277,7 +277,10 @@ try:
                        description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
 
 except Exception as e:
-    logging.error(traceback.format_exc())
+    print(d + ' has been removed')
+    listOfRepositories.remove(d)
+    post_issue(name='Validation failed - repository ' + repository_name,
+               description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
 
 #listOfRepositories.remove('temperature_profile_daily_avg_household_yearlong_2010')
 #listOfRepositories.remove('temperature_profile_daily_avg_industry_yearlong_2010')
@@ -927,7 +930,7 @@ for repository_name in listOfRepositories:
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
     except Exception as e:
-        logging.error(traceback.format_exc())
+        #logging.error(traceback.format_exc())
         post_issue(name='Integration failed - repository ' + repository_name,
                    description='A problem occurred during the integration process of the repository. Please contact the development team.')
 
