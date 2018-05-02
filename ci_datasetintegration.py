@@ -545,7 +545,7 @@ for repository_name in listOfRepositories:
                        '-targetDir ' + pyramid_path + ' ' + raster_path
                 print(cmds)
                 subprocess.call(cmds, shell=True)
-p = group.projects.
+
                 # add to geoserver
 
                 workspace = 'hotmaps'
