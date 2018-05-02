@@ -33,7 +33,7 @@ lau_table = 'public' + '.' + lau_table_name # change to geo_schema when lau tabl
 nuts_table_name = 'nuts'
 nuts_table = geo_schema + '.' + nuts_table_name
 vector_SRID = "3035"
-raster_SRID = "3035"
+raster_SRID = "3035"74
 
 # time tables
 time_table_name = 'time'
@@ -177,8 +177,8 @@ verbose = True
 
 # check repository on gitlab
 
-#repo_date = datetime.utcnow()-timedelta(days=1)
-repo_date = datetime(2010, 1, 1, 0, 0, 0)
+#repo_date = datetime.utcnow()-timedelta(days=1)  #permet de récupérer les datasats des 24 dernières heures
+repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets. 
 dateStr = repo_date.isoformat(sep='T')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token='f-JzjmRRnxzwqC5o3zsQ')
 
