@@ -191,7 +191,8 @@ verbose = True
 # check repository on gitlab
 
 #repo_date = datetime.utcnow()-timedelta(days=1)  #permet de récupérer les datasats des 24 dernières heures
-repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets. dateStr = repo_date.isoformat(sep='T')+'Z'
+repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets.
+dateStr = repo_date.isoformat(sep='T')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token=GIT_token)
 
 hotmapsGroups = []
