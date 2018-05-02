@@ -158,7 +158,6 @@ def import_shapefile(src_file, date):
             values.append(feature.GetField(att))
 
         geom = feature.GetGeometryRef()
-        https: // github.com / HotMaps / CI_DatasetIntegration.git
 
         # convert Polygon type to MultiPolygon
         if geom.GetGeometryType() == osgeo.ogr.wkbPolygon:
@@ -234,39 +233,31 @@ for group in hotmapsGroups:
                    listOfRepositories.append(proj.name)
                    print(repository_name)
 
-            e:
-                           # git clone
-                           print('clone repository')
-                           url = proj.http_url_to_repo
-                           Repo.clone_from(url, repository_path)
-                           print('successfuly cloned repository')
-                   except:
-                       print('No datapackage.json or in a wrong place')
-                       post_issue(name='Validation failed - repository ' + repository_name,
-                                  descript       if os.path.exists(repository_path):
+                   if os.path.exists(repository_path):
                        # git pull
                        print('update repository')
                        g = git.cmd.Git(repository_path)
                        g.pull()
                        print('successfuly updated repository')
 
-                       else:
-                           # git clone
-                           print('clone repository')
-                           url = proj.http_url_to_repo
-                           Repo.clone_from(url, repository_path)
-                           print('successfuly cloned repository')
-                   except:
-                       print('No datapackage.json or in a wrong place')
-                       post_issue(name='Validation failed - repository ' + repository_name,
-                                  description='No file "datapackage.json" at the root of the repository. Please check that the file is present and in the correct directory (root).')
+                   else:
+                       # git clone
+                       print('clone repository')
+                       url = proj.http_url_to_repo
+                       #print(url)
+                       Repo.clone_from(url, repository_path)
+                       print('successfuly cloned repository')
+
+            except:
+                print('No datapackage.json or in a wrong place')
+                post_issue(name='Validation failed - repository ' + repository_name,
+                           description='No file "datapackage.json" at the root of the repository. Please check that the file is present and in the correct directory (root).')
 
 
 
 #listOfRepositories.append('.git')
 
 # Validate_Datapackage
-listOfRepositories
 try:
     list_dirs = [name for name in os.listdir(GIT_base_path) if os.path.isdir(os.path.join(GIT_base_path, name))]
     list_dirs = sorted(list_dirs)
@@ -683,7 +674,7 @@ for repository_name in listOfRepositories:
                         valuesUnit.append(attributes_units[i])
                         valuesUnitType.append("varchar(255)")
 
-                if valuesUnit and len(valueyou dsUnit) > 0:
+                if valuesUnit and len(valuesUnit) > 0:
                     db_attributes_names.extend(valuesUnitName)
                     db_attributes_types.extend(valuesUnitType)
 
@@ -710,7 +701,7 @@ for repository_name in listOfRepositories:
 
                 except:
                     print('No spatial field/resolution specified in datapackage.json')
-                    missing_geometry = count_geom_cols <= 0:
+                    missing_geometry = count_geom_cols <= 0
                     # with open(tabular_file_path, "rb") as f:
                     #     reader = csv.reader(f)
                     #     column_names = next(reader)
