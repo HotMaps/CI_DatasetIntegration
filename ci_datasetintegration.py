@@ -73,10 +73,10 @@ sudo docker run \
 def post_issue(name, description):
     issue = taiga_project.add_issue(
         name,
-        project.priorities.get(name='Workaround possible - Low').id,
-        project.issue_statuses.get(name='New').id,
-        project.issue_types.get(name='Dataset integration').id,
-        project.severities.get(name='Minor').id,
+        taiga_project.priorities.get(name='Workaround possible - Low').id,
+        taiga_project.issue_statuses.get(name='New').id,
+        taiga_project.issue_types.get(name='Dataset integration').id,
+        taiga_project.severities.get(name='Minor').id,
         description=description
     )
 
@@ -256,7 +256,7 @@ for group in hotmapsGroups:
 
 
 
-#listOfRepositories.append('.git')
+listOfRepositories.append('.git')
 
 # Validate_Datapackage
 try:
