@@ -19,9 +19,14 @@ from db.db_helper import str_with_quotes, str_with_single_quotes
 import requests
 import gitlab
 import logging
+from time import time, strftime, gmtime
 from taiga import TaigaAPI
 from taiga.exceptions import TaigaException
 
+
+log_start_time = time()
+log_previous_time = log_start_time
+print(strftime("Execution start time: %Y-%m-%d %H:%M:%S +0000", gmtime(log_start_time)))
 
 taiga_api = TaigaAPI(token=TAIGA_token)
 taiga_project = taiga_api.projects.get_by_slug('widmont-hotmaps')
@@ -32,8 +37,8 @@ stat_schema = 'stat'  # 'stat' on production/dev database
 geo_schema = 'geo'  # 'geo' on production/dev database
 
 # geo tables
-lau_table_name = 'lau'
-lau_table = 'public' + '.' + lau_table_name # change to geo_schema when lau table has been moved in db
+lau_table_name = 'lau2'
+lau_table = 'geo' + '.' + lau_table_name # change to geo_schema when lau table has been moved in db
 nuts_table_name = 'nuts'
 nuts_table = geo_schema + '.' + nuts_table_name
 vector_SRID = "3035"
@@ -48,8 +53,8 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'scen_current_building_demand_csv'
-listOfRepositories = []
+repository_name = 'vol_res_curr_density'
+listOfRepositories = ['electricity_emissions_hourly', 'electricity_prices_hourly', 'electricity_generation_yearly']
 repository_path = os.path.join(repositories_base_path, repository_name)
 print(repository_path)
 
@@ -70,6 +75,18 @@ sudo docker run \
         -p 32768:5432 \
         -d hotmaps/postgis-database
 """
+def log_print_step(text):
+    print(text)
+    log_end_time = time()
+    print(strftime("%Y-%m-%d %H:%M:%S +0000", gmtime(log_end_time)))
+    hours, rem = divmod(log_end_time-log_previous_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+    print("Current step time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+    hours, rem = divmod(log_end_time-log_start_time, 3600)
+    minutes, seconds = divmod(rem, 60)
+    print("Ellapsed time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+    log_previous_time = log_end_time
+
 def post_issue(name, description):
     issue = taiga_project.add_issue(
         name,
@@ -79,6 +96,11 @@ def post_issue(name, description):
         project.severities.get(name='Minor').id,
         description=description
     )
+
+
+def post_issue_repo(project, name, description):
+    issue = project.issues.create({'title': name, 'description': description})
+
 
 def parse_date(str):
     for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S'):
@@ -206,87 +228,92 @@ print(group.id)
 
 subgroups = group.subgroups.list()
 
+log_print_step("Clone/Update repositories")
 
 # Add all subgroups in the groups list as groups
 for subgroup in subgroups:
     hotmapsGroups.append(gl.groups.get(subgroup.id, lazy=True))
 
 
-for group in hotmapsGroups:
-        projects = group.projects.list(all=True)
-        print(projects)
+# for group in hotmapsGroups:
+#         projects = group.projects.list(all=True)
+#         print(projects)
+#
+#         for project in projects:
+#
+#             proj = gl.projects.get(id=project.id)
+#
+#             commits = proj.commits.list(since=dateStr)
+#             #print(proj)
+#             try:
+#                #f = proj.files.get(file_path='datapackage.json', ref='master')
+#                #print(f.content)
+#
+#                if len(commits) == 0:
+#                    print('No commit')
+#                else:
+#                    repository_name = proj.name
+#                    repository_path = os.path.join(repositories_base_path, repository_name)
+#                    listOfRepositories.append(proj.name)
+#                    print(repository_name)
+#
+#                    if os.path.exists(repository_path):
+#                        # git pull
+#                        print('update repository')
+#                        g = git.cmd.Git(repository_path)
+#                        g.pull()
+#                        print('successfuly updated repository')
+#
+#                    else:
+#                        # git clone
+#                        print('clone repository')
+#                        url = proj.http_url_to_repo
+#                        #print(url)
+#                        Repo.clone_from(url, repository_path)
+#                        print('successfuly cloned repository')
+#
+#             except:
+#                 print('No datapackage.json or in a wrong place')
+#                 post_issue(name='Validation failed - repository ' + repository_name,
+#                            description='No file "datapackage.json" at the root of the repository. Please check that the file is present and in the correct directory (root).')
+#
+#
+#
+# listOfRepositories.remove('.git')
 
-        for project in projects:
-
-            proj = gl.projects.get(id=project.id)
-
-            commits = proj.commits.list(since=dateStr)
-            #print(proj)
-            try:
-               #f = proj.files.get(file_path='datapackage.json', ref='master')
-               #print(f.content)
-
-               if len(commits) == 0:
-                   print('No commit')
-               else:
-                   repository_name = proj.name
-                   repository_path = os.path.join(repositories_base_path, repository_name)
-                   listOfRepositories.append(proj.name)
-                   print(repository_name)
-
-                   if os.path.exists(repository_path):
-                       # git pull
-                       print('update repository')
-                       g = git.cmd.Git(repository_path)
-                       g.pull()
-                       print('successfuly updated repository')
-
-                   else:
-                       # git clone
-                       print('clone repository')
-                       url = proj.http_url_to_repo
-                       #print(url)
-                       Repo.clone_from(url, repository_path)
-                       print('successfuly cloned repository')
-
-            except:
-                print('No datapackage.json or in a wrong place')
-                post_issue(name='Validation failed - repository ' + repository_name,
-                           description='No file "datapackage.json" at the root of the repository. Please check that the file is present and in the correct directory (root).')
-
-
-
-#listOfRepositories.append('.git')
-
+log_print_step("Datapcakge validation script")
 # Validate_Datapackage
-try:
-    list_dirs = [name for name in os.listdir(GIT_base_path) if os.path.isdir(os.path.join(GIT_base_path, name))]
-    list_dirs = sorted(list_dirs)
-    for d in list_dirs:
-        d_file_path = os.path.join(repositories_base_path, d, 'datapackage.json')
-        print(d_file_path)
-        print()
-        print("#########################")
-        # validate_datapackage.print(d, bcolors.HEADER)
-        print(d)
-        print("#########################")
-        if validate_datapackage.validate_datapackage(d_file_path) == False:
-            print(d + ' has been removed')
-            listOfRepositories.remove(d)
-            post_issue(name='Validation failed - repository ' + repository_name,
-                       description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
-
-except Exception as e:
-    print(d + ' has been removed')
-    listOfRepositories.remove(d)
-    post_issue(name='Validation failed - repository ' + repository_name,
-               description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
+# try:
+#     list_dirs = [name for name in os.listdir(GIT_base_path) if os.path.isdir(os.path.join(GIT_base_path, name))]
+#     list_dirs = sorted(list_dirs)
+#     for d in list_dirs:
+#         d_file_path = os.path.join(repositories_base_path, d, 'datapackage.json')
+#         print(d_file_path)
+#         print()
+#         print("#########################")
+#         # validate_datapackage.print(d, bcolors.HEADER)
+#         print(d)
+#         print("#########################")
+#         if validate_datapackage.validate_datapackage(d_file_path) == False:
+#             print(d + ' has been removed')
+#             listOfRepositories.remove(d)
+#             post_issue(name='Validation failed - repository ' + repository_name,
+#                        description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
+#
+# except Exception as e:
+#     print(d + ' has been removed')
+#     listOfRepositories.remove(d)
+#     post_issue(name='Validation failed - repository ' + repository_name,
+#                description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
 
 #listOfRepositories.remove('temperature_profile_daily_avg_household_yearlong_2010')
 #listOfRepositories.remove('temperature_profile_daily_avg_industry_yearlong_2010')
 #listOfRepositories.remove('scen_ambitious_building_demand')
 
 for repository_name in listOfRepositories:
+    log_print_step("Start integration of " + repository_name)
+    log_start_repo_time = log_previous_time
+
     repository_path = os.path.join(repositories_base_path, repository_name)
 
     try:
@@ -303,6 +330,7 @@ for repository_name in listOfRepositories:
         print(table_name)
 
         for r in gis_resources:
+            log_print_step("Start resource")
             format = r['format']
             name = r['name']
             path = r['path']
@@ -376,9 +404,11 @@ for repository_name in listOfRepositories:
                 db.create_table(table_name=geo_schema + '.' + table_name, col_names=db_attributes_names,
                                 col_types=db_attributes_types, id_col_name='gid')
 
+                log_print_step("Start shapefile importation")
                 # import shapefile
                 import_shapefile(os.path.join(repository_path, path), start_date)  # (base_path, 'git-repos', repository_name, path))
 
+                log_print_step("Start geoserver integration")
                 # add to geoserver
                 workspace = 'hotmaps'
                 store = 'hotmapsdb'
@@ -434,6 +464,30 @@ for repository_name in listOfRepositories:
                     # keep default data
                     pass
 
+                # temporal resolution
+                temporal_resolution = ''
+                try:
+                    tr = r['temporal_resolution']
+                except:
+                    print('Missing attribute temporal_resolution in datapackage.json. Using year as default')
+                    tr = 'year'
+                if tr.lower().startswith('year'):
+                    temporal_resolution = 'year'
+                elif tr.lower().startswith('month'):
+                    temporal_resolution = 'month'
+                elif tr.lower().startswith('day'):
+                    temporal_resolution = 'day'
+                elif tr.lower().startswith('hour'):
+                    temporal_resolution = 'hour'
+                elif tr.lower().startswith('minute'):
+                    temporal_resolution = 'minute'
+                elif tr.lower().startswith('second'):
+                    temporal_resolution = 'second'
+                elif tr.lower().startswith('quarter'):
+                    temporal_resolution = 'quarter'
+                elif tr.lower().startswith('week'):
+                    temporal_resolution = 'week'
+
                 # number_of_bands = raster['number_of_bands']
                 # band0 = raster['band0']
                 raster_path = os.path.join(repository_path, path)  # (base_path, 'git-repos', repository_name, path)
@@ -446,14 +500,37 @@ for repository_name in listOfRepositories:
 
                 rast_tbl = geo_schema + '.' + raster_table_name
 
+                log_print_step("Start raster integration in database")
                 #cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
                 cmds = 'raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + raster_path + '" ' + rast_tbl + ' | psql'
                 print(cmds)
                 subprocess.call(cmds, shell=True)
 
+                # add time relationship in raster table
+                constraints = "ALTER TABLE " + rast_tbl + " " \
+                              + "ADD COLUMN IF NOT EXISTS fk_" + time_table_name + "_id bigint; "
+                constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
+                              + "SELECT 1 FROM pg_constraint WHERE conname = \'" + raster_table_name + "_" + time_table_name + "_id_fkey\') THEN " \
+                              + "ALTER TABLE " + rast_tbl + " " \
+                              + "ADD CONSTRAINT " + raster_table_name + "_" + time_table_name + "_id_fkey " \
+                              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
+                              + "REFERENCES " + time_table + "(id) " \
+                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
+                              + "END IF; END; $$; "
+
+                fk_time_id = get_or_create_time_id(timestamp=start_date, granularity=temporal_resolution)
+                print('fk_time_id=', fk_time_id)
+
+                query = constraints + "UPDATE " + rast_tbl + " AS r " \
+                        + "SET fk_" + time_table_name + "_id = " + str(fk_time_id) + " " \
+                        + "WHERE fk_" + time_table_name + "_id IS NULL;"
+
+                db.query(commit=True, notices=verbose, query=query)
+
                 # Precompute layers for nuts and lau
                 # LAU
-                vect_tbl = "public." + lau_table_name
+                log_print_step("Precompute LAU")
+                vect_tbl = "geo." + lau_table_name
                 vect_tbl_name = lau_table_name
                 prec_tbl = stat_schema + '.' + precomputed_table_name_lau
                 prec_tbl_name = precomputed_table_name_lau
@@ -461,17 +538,30 @@ for repository_name in listOfRepositories:
                 db.drop_table(table_name=prec_tbl, notices=verbose)
 
                 attributes_names = (
-                    'count', 'sum', 'mean', 'stddev', 'min', 'max', 'comm_id', 'fk_' + vect_tbl_name + '_gid')
+                    'count', 'sum', 'mean', 'stddev', 'min', 'max',
+                    'comm_id',
+                    'fk_' + time_table_name + '_id', 'fk_' + vect_tbl_name + '_gid')
+                attributes_types = (
+                    'bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
+                    'varchar(255)',
+                    'bigint', 'bigint')
+
                 constraints = "ALTER TABLE " + prec_tbl + " " \
-                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + vect_tbl_name + "_gid_fkey " \
+                              + "ADD CONSTRAINT " + prec_tbl_name + "fkey_" + vect_tbl_name + "_gid_fkey " \
                               + "FOREIGN KEY (fk_" + vect_tbl_name + "_gid) " \
                               + "REFERENCES " + vect_tbl + "(gid) " \
-                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
+                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION; "
+
+                constraints = constraints + "ALTER TABLE " + prec_tbl + " " \
+                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + time_table_name + "_id_fkey " \
+                              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
+                              + "REFERENCES " + time_table + "(id) " \
+                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL "
+
 
                 db.create_table(table_name=prec_tbl,
                                 col_names=attributes_names,
-                                col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
-                                           'numeric(20,2)', 'varchar(255)', 'bigint'),
+                                col_types=attributes_types,
                                 constraints_str=constraints,
                                 notices=verbose)
 
@@ -481,16 +571,19 @@ for repository_name in listOfRepositories:
                         + "FROM " + rast_tbl + " " \
                         + "WHERE ST_Intersects(" \
                         + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
-                        + ") " \
-                        + ").*, " + vect_tbl + ".comm_id, " + vect_tbl + ".gid " \
+                        + ") AND fk_" + time_table_name + "_id = " + str(fk_time_id) + " " \
+                        + ").*, " + vect_tbl + ".comm_id, " + str(fk_time_id) + " AS fk_" + time_table_name + "_id," + vect_tbl + ".gid " \
                         + "FROM " + vect_tbl + " "
 
                 db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
-                                                             + ' (' + ', '.join(
-                    map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
-                                                             + query + ' ;')
+                    + ' (' + ', '.join(
+                        map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
+                        + query + ' ;')
 
                 # NUTS
+                log_print_step("Precompute NUTS 3")
+
+                prec_lau_tbl = prec_tbl
                 vect_tbl = geo_schema + '.' + nuts_table_name
                 prec_tbl = stat_schema + '.' + precomputed_table_name_nuts
                 vect_tbl_name = nuts_table_name
@@ -499,35 +592,88 @@ for repository_name in listOfRepositories:
                 db.drop_table(table_name=prec_tbl, notices=verbose)
 
                 attributes_names = (
-                    'count', 'sum', 'mean', 'stddev', 'min', 'max', 'nuts_id', 'fk_' + vect_tbl_name + '_gid')
+                    'min', 'max', 'sum', 'count',
+                    'mean', 'nuts_id', 'stat_levl_',
+                    'fk_' + time_table_name + '_id', 'fk_' + vect_tbl_name + '_gid')
+
                 constraints = "ALTER TABLE " + prec_tbl + " " \
                               + "ADD CONSTRAINT " + prec_tbl_name + "_" + vect_tbl_name + "_gid_fkey " \
                               + "FOREIGN KEY (fk_" + vect_tbl_name + "_gid) " \
                               + "REFERENCES " + vect_tbl + "(gid) " \
-                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION "
+                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; "
+
+                constraints = constraints + "ALTER TABLE " + prec_tbl + " " \
+                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + time_table_name + "_id_fkey " \
+                              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
+                              + "REFERENCES " + time_table + "(id) " \
+                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL "
 
                 db.create_table(table_name=prec_tbl,
                                 col_names=attributes_names,
-                                col_types=('bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
-                                           'numeric(20,2)', 'varchar(255)', 'bigint'),
+                                col_types=('numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'bigint',
+                                           'numeric(20,2)', 'varchar(255)', 'integer',
+                                           'bigint', 'bigint'),
                                 constraints_str=constraints,
                                 notices=verbose)
 
-                query = "SELECT (" \
-                        + "SELECT (ST_SummaryStatsAgg( ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
-                        vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
-                        + "FROM " + rast_tbl + " " \
-                        + "WHERE ST_Intersects(" \
-                        + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
-                        + ") " \
-                        + ").*, " + vect_tbl + ".nuts_id, " + vect_tbl + ".gid " \
-                        + "FROM " + vect_tbl + " "
+                # Compute NUTS 3 from LAU
+                query = "INSERT INTO " + prec_tbl + " (min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
+                        + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
+                        + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.ngid " \
+                        + "FROM " \
+                        + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
+                        + "intr.nuts_id, intr.stat_levl_, intr.fk_" + time_table_name + "_id, intr.ngid " \
+                        + "FROM " \
+                        + "(SELECT l.comm_id, l.geom as lgeom, l.gid as lgid, " \
+            			+ "n.nuts_id, n.geom as ngeom, n.gid as ngid, n.stat_levl_, " \
+            			+ "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, " \
+                        + "data_tbl.mean, data_tbl.fk_" + time_table_name + "_id " \
+                        + "FROM " + lau_table + " l " \
+                        + "LEFT JOIN " + vect_tbl + " n ON ST_Intersects(ST_Transform(l.geom, ST_SRID(n.geom)), n.geom) " \
+                        + "LEFT JOIN " + prec_lau_tbl + " data_tbl ON data_tbl.fk_" + lau_table_name + "_gid = l.gid " \
+                        + "WHERE n.stat_levl_ = 3 " \
+                        + "AND n.year = '2013-01-01' " \
+                        + ") as intr " \
+                        + "WHERE intr.count IS NOT NULL " \
+                        + "AND ST_Covers(intr.ngeom, ST_Transform(intr.lgeom, ST_SRID(intr.ngeom))) " \
+                        + "GROUP BY intr.ngid, intr.nuts_id, intr.ngeom, intr.stat_levl_, intr.fk_" + time_table_name + "_id " \
+                        + ") as i ); "
 
-                db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
-                                                             + ' (' + ', '.join(
-                    map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
-                                                             + query + ' ;')
 
+                db.query(commit=True, notices=verbose, query=query)
+
+                # compute NUTS 0-2 from NUTS 3
+                log_print_step("Precompute NUTS 0-2")
+                query = "INSERT INTO " + prec_tbl + " " \
+                        + "(min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
+                        + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
+                        + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.gid " \
+                        + "FROM " \
+                        + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
+                	 	+ "n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id, n.gid " \
+                		+ "FROM ( " \
+                		+ "SELECT data_tbl.nuts_id, data_tbl.fk_" + vect_tbl_name + "_gid, data_tbl.stat_levl_, " \
+                        + "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, data_tbl.mean, " \
+                		+ "data_tbl.fk_" + time_table_name + "_id " \
+                		+ "FROM " + prec_tbl + " data_tbl " \
+                		+ "WHERE data_tbl.stat_levl_ = 3 " \
+                		+ ") as intr " \
+                	 	+ "RIGHT JOIN " + vect_tbl + " n ON intr.nuts_id LIKE n.nuts_id || '%' " \
+                		+ "WHERE intr.count IS NOT NULL  " \
+                	 	+ "AND n.stat_levl_ < 3 " \
+                	 	+ "AND n.year = '2013-01-01' " \
+                        + "GROUP BY n.gid, n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id " \
+                	    + ") as i " \
+                        + "); "
+
+                db.query(commit=True, notices=verbose, query=query)
+
+                # db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
+                #                                              + ' (' + ', '.join(
+                #     map(db_helper.str_with_quotes, [x.lower() for x in attributes_names])) + ') '
+                #                                              + query + ' ;')
+
+                log_print_step("Generate image pyramid for geoserver")
                 # build pyramid and add layer to geoserver
                 pyramid_path = os.path.join(GEO_base_path, raster_table_name)
 
@@ -542,7 +688,7 @@ for repository_name in listOfRepositories:
                 subprocess.call(cmds, shell=True)
 
                 # add to geoserver
-
+                log_print_step("Add to geoserver")
                 workspace = 'hotmaps'
                 layer_name = raster_table_name
 
@@ -590,6 +736,7 @@ for repository_name in listOfRepositories:
                 print(response, response.content)
 
             elif gis_data_type == 'tabular-data-resource':
+                log_print_step("Read datapackage for CSV")
                 schema = r['schema']
 
                 # retrieve start and end date
@@ -688,9 +835,9 @@ for repository_name in listOfRepositories:
                 # db_attributes_names.append('end_date')
                 # db_attributes_types.append('timestamp')
 
+                log_print_step("Drop current table")
                 db.drop_table(table_name=stat_schema + '.' + table_name)
 
-                # TODO : Handle LAU/Nuts difference (use the spatial_resolution)
                 # spatial resolution
                 spatial_table = None
                 spatial_resolution = None
@@ -774,10 +921,11 @@ for repository_name in listOfRepositories:
                     db_attributes_types.append('bigint')
 
                 # generate table with constraints
+                log_print_step("Generate table")
                 db.create_table(table_name=stat_schema + '.' + table_name, col_names=db_attributes_names,
                                 col_types=db_attributes_types, id_col_name='id', constraints_str=constraints)
 
-
+                log_print_step("Integrate CSV in database")
                 file = open(tabular_file_path, "r")
                 csv.register_dialect('custom', delimiter=delimiter, doublequote=double_quote) # lineterminator=lineterminator
                 reader = csv.DictReader(f=file, dialect='custom')
@@ -890,6 +1038,7 @@ for repository_name in listOfRepositories:
                     db.query(commit=True, query=query)
 
                     # add to geoserver
+                    log_print_step("Add to Geoserver")
                     workspace = 'hotmaps'
                     store = 'hotmapsdb'
                     layer_name = table_name + '_view'
@@ -929,9 +1078,23 @@ for repository_name in listOfRepositories:
 
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
+
+            print("End of integration of repository ", repository_name)
+            log_end_time = time()
+            print(strftime("%Y-%m-%d %H:%M:%S +0000", gmtime(log_end_time)))
+            hours, rem = divmod(log_end_time-log_start_repo_time, 3600)
+            minutes, seconds = divmod(rem, 60)
+            print("Duration of integration: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+
     except Exception as e:
         #logging.error(traceback.format_exc())
         post_issue(name='Integration failed - repository ' + repository_name,
                    description='A problem occurred during the integration process of the repository. Please contact the development team.')
 
 db.close_connection()
+log_end_time = time()
+print(strftime("%Y-%m-%d %H:%M:%S +0000", gmtime(log_end_time)))
+hours, rem = divmod(log_end_time-log_start_time, 3600)
+minutes, seconds = divmod(rem, 60)
+print("Script execution time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
+print("--- %s seconds ---" % (log_end_time - log_start_time))
