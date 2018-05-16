@@ -78,8 +78,9 @@ sudo docker run \
 def log_print_step(text):
     print(text)
     log_end_time = time()
+    prev_time = log_previous_time
     print(strftime("%Y-%m-%d %H:%M:%S +0000", gmtime(log_end_time)))
-    hours, rem = divmod(log_end_time-log_previous_time, 3600)
+    hours, rem = divmod(log_end_time-prev_time, 3600)
     minutes, seconds = divmod(rem, 60)
     print("Current step time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
     hours, rem = divmod(log_end_time-log_start_time, 3600)
