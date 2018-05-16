@@ -283,7 +283,8 @@ for subgroup in subgroups:
 #
 # listOfRepositories.remove('.git')
 # TODO uncomment previous code to automatically integrate all datasets
-listOfRepositories = ['electricity_emissions_hourly', 'electricity_prices_hourly', 'electricity_generation_yearly']
+listOfRepositories = [
+    'electricity_generation_yearly']
 
 log_print_step("Datapackage validation script")
 # Validate_Datapackage
@@ -975,12 +976,14 @@ for repository_name in listOfRepositories:
                         # handle temporal column
                         if name == 'datetime':
                             fk_time_id = get_or_create_time_id(timestamp=att, granularity=temporal_resolution)
-                            print('fk_timdouble_quotese_id=', fk_time_id)
+                            print('fk_time_id=', fk_time_id)
+                            skip = True
                         elif name == 'timestamp':
                             timestamp = datetime.fromtimestamp(att).strftime('%Y/%m/%d %H:%M:%S')
                             fk_time_id = db.query(commit=True,
                                                   query="SELECT id FROM stat.time WHERE timestamp = '" + timestamp + "' AND granularity LIKE '" + temporal_resolution + "'")
                             print('fk_time_id=', fk_time_id)
+                            skip = True
 
                         if att == '':
                             att = None
