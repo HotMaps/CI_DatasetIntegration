@@ -54,7 +54,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 # git repositories path
 repositories_base_path = GIT_base_path
 repository_name = 'vol_res_curr_density'
-listOfRepositories = ['electricity_emissions_hourly', 'electricity_prices_hourly', 'electricity_generation_yearly']
+listOfRepositories = []
 repository_path = os.path.join(repositories_base_path, repository_name)
 print(repository_path)
 
@@ -282,6 +282,8 @@ for subgroup in subgroups:
 #
 #
 # listOfRepositories.remove('.git')
+# TODO uncomment previous code to automatically integrate all datasets
+listOfRepositories = ['electricity_emissions_hourly', 'electricity_prices_hourly', 'electricity_generation_yearly']
 
 log_print_step("Datapackage validation script")
 # Validate_Datapackage
@@ -1089,7 +1091,7 @@ for repository_name in listOfRepositories:
             print("Duration of integration: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
 
     except Exception as e:
-        #logging.error(traceback.format_exc())
+        logging.error(traceback.format_exc())
         post_issue(name='Integration failed - repository ' + repository_name,
                    description='A problem occurred during the integration process of the repository. Please contact the development team.')
 
