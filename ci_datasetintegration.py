@@ -841,7 +841,7 @@ for repository_name in listOfRepositories:
                 # db_attributes_types.append('timestamp')
 
                 log_print_step("Drop current table")
-                db.drop_table(table_name=stat_schema + '.' + table_name)
+                db.drop_table(table_name=stat_schema + '.' + table_name, cascade=True)
 
                 # spatial resolution
                 spatial_table = None

@@ -88,11 +88,14 @@ class DB(object):
         query = query + ') '
         return self.query(query=query, data=values, commit=commit, notices=notices)
 
-    def drop_table(self, table_name, notices=False):
+    def drop_table(self, table_name, cascade=False notices=False):
         try:
             print('Droping table ', table_name)
             cursor = self.conn.cursor()
-            cursor.execute('DROP TABLE IF EXISTS ' + table_name)
+            query = 'DROP TABLE IF EXISTS ' + table_name
+            if cascade:
+                query = query + ' CASCADE'
+            cursor.execute(query)
             if notices:
                 pprint(self.conn.notices)
             self.conn.commit()
