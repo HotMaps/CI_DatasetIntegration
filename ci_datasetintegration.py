@@ -974,16 +974,15 @@ for repository_name in listOfRepositories:
                             print('fk_gid=', fk_gid)
 
                         # handle temporal column
+                        fk_time_id = None
                         if name == 'datetime':
                             fk_time_id = get_or_create_time_id(timestamp=att, granularity=temporal_resolution)
                             print('fk_time_id=', fk_time_id)
-                            skip = True
                         elif name == 'timestamp':
                             timestamp = datetime.fromtimestamp(att).strftime('%Y/%m/%d %H:%M:%S')
                             fk_time_id = db.query(commit=True,
                                                   query="SELECT id FROM stat.time WHERE timestamp = '" + timestamp + "' AND granularity LIKE '" + temporal_resolution + "'")
                             print('fk_time_id=', fk_time_id)
-                            skip = True
 
                         if att == '':
                             att = None
