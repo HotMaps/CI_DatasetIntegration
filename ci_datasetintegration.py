@@ -1017,70 +1017,71 @@ for repository_name in listOfRepositories:
                     #        [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
                     #    map(str_with_single_quotes, values)) + ')')
 
-                    # create view for Geoserver (if contains geometries / or refs to existing geometries)
-                    if fk_time_id:
-                        time_cols = ', ' + time_table_name + '.timestamp'
-                        time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
-                                    'ON (' + table_name + '.fk_time_id = ' + time_table_name + '.id)'
-                    else:
-                        time_cols = ''
-                        time_join = ''
+                # create view for Geoserver (if contains geometries / or refs to existing geometries)
+                log_print_step("Create view for Geoserver")
+                if fk_time_id:
+                    time_cols = ', ' + time_table_name + '.timestamp'
+                    time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
+                                'ON (' + table_name + '.fk_time_id = ' + time_table_name + '.id)'
+                else:
+                    time_cols = ''
+                    time_join = ''
 
-                    if fk_gid:
-                        geom_cols = ', ' + spatial_table_name + '.*'
-                        geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
-                                    'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
-                    else:
-                        geom_cols = ''
-                        geom_join = ''
+                if fk_gid:
+                    geom_cols = ', ' + spatial_table_name + '.*'
+                    geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
+                                'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
+                else:
+                    geom_cols = ''
+                    geom_join = ''
 
-                    query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
-                            'AS SELECT ' + table_name + '.*' + time_cols + geom_cols + ' ' + \
-                            'FROM ' + stat_schema + '.' + table_name + \
-                            time_join + geom_join + \
-                            ';'
+                query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
+                        'AS SELECT ' + table_name + '.*' + time_cols + geom_cols + ' ' + \
+                        'FROM ' + stat_schema + '.' + table_name + \
+                        time_join + geom_join + \
+                        ';'
 
-                    # add to database
-                    db.query(commit=True, query=query)
+                # add to database
+                db.query(commit=True, query=query)
 
-                    # add to geoserver
-                    log_print_step("Add to Geoserver")
-                    workspace = 'hotmaps'
-                    store = 'hotmapsdb'
-                    layer_name = table_name + '_view'
+                # add to geoserver
+                log_print_step("Add to Geoserver")
+                workspace = 'hotmaps'
+                store = 'hotmapsdb'
+                layer_name = table_name + '_view'
 
-                    # remove previous layer from geoserver
-                    # remove layer
-                    response = requests.delete(
-                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
-                        auth=(GEO_user, GEO_password),
-                    )
-                    print(response, response.content)
+                # remove previous layer from geoserver
+                # remove layer
+                response = requests.delete(
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                    auth=(GEO_user, GEO_password),
+                )
+                print(response, response.content)
 
-                    # remove feature type
-                    response = requests.delete(
-                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
-                        auth=(GEO_user, GEO_password),
-                    )
-                    print(response, response.content)
+                # remove feature type
+                response = requests.delete(
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                    auth=(GEO_user, GEO_password),
+                )
+                print(response, response.content)
 
-                    # create layer
-                    headers = {
-                        'Content-type': 'text/xml',
-                    }
-                    data = '<featureType>' \
-                           + '<name>' + layer_name + '</name>' \
-                           + '<title>' + layer_name + '</title>' \
-                           + '</featureType>'
+                # create layer
+                headers = {
+                    'Content-type': 'text/xml',
+                }
+                data = '<featureType>' \
+                       + '<name>' + layer_name + '</name>' \
+                       + '<title>' + layer_name + '</title>' \
+                       + '</featureType>'
 
-                    response = requests.post(
-                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
-                        headers=headers,
-                        data=data,
-                        auth=(GEO_user, GEO_password),
-                    )
-                    print(data)
-                    print(response, response.content)
+                response = requests.post(
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                    headers=headers,
+                    data=data,
+                    auth=(GEO_user, GEO_password),
+                )
+                print(data)
+                print(response, response.content)
 
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
