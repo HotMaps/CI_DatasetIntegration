@@ -1029,7 +1029,7 @@ for repository_name in listOfRepositories:
                     if fk_gid:
                         geom_cols = ', ' + spatial_table_name + '.*'
                         geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
-                                    'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.id)'
+                                    'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
                     else:
                         geom_cols = ''
                         geom_join = ''
