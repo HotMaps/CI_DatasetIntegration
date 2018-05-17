@@ -2,6 +2,17 @@ import psycopg2
 import sys
 from pprint import pprint
 
+class DBError(Exception):
+    '''base error'''
+    pass
+
+class DBInsertError(DBError):
+    '''raised when something happened during insertion of data'''
+    def __init__(self, expression, message):
+        self.expression = expression
+        self.message = message
+
+
 def str_with_quotes(obj):
     return '"' + str(obj) + '"'
 
@@ -70,7 +81,7 @@ class DB(object):
             print(columns, len(columns))
             print(types, len(types))
             print(values, len(values))
-            return None
+            raise DBInsertError('Error while trying to insert data in database', 'Column names, types or values don\'t match.')
 
         # build query
         query = 'INSERT INTO ' + table + ' '

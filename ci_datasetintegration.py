@@ -105,16 +105,30 @@ def post_issue_repo(project, name, description):
 
 
 def parse_date(str):
-    for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S'):
+    for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S',
+                   '%Y/%m/%d %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M'):
         try:
             return datetime.strptime(str, format)
         except:
             pass
-    raise ValueError('date format not supported! excpecting: ', '%Y/%m/%d %H:%M:%S', ' or ', '%Y-%m-%d %H:%M:%S')
+    raise ValueError('date format not supported! excpecting: ',
+                     '%Y/%m/%d %H:%M:%S', ' or ', '%Y-%m-%d %H:%M:%S', ' or ',
+                     '%d/%m/%Y %H:%M:%S', ' or ', '%Y/%m/%d %H:%M', ' or ',
+                     '%Y-%m-%d %H:%M', ' or ', '%d/%m/%Y %H:%M')
 
 def get_or_create_time_id(timestamp, granularity):
+    t = timestamp
+    date = None
+    try:
+        date = parse_date(timestamp)
+    except ValueError:
+        raise
+
+    if date is not None:
+        t = datetime.strftime(date, '%Y/%m/%d %H:%M:%S')
+
     fk_time_id = db.query(commit=True,
-                          query="SELECT id FROM stat.time WHERE timestamp = '" + timestamp + "' AND granularity LIKE '" + granularity + "'")
+                          query="SELECT id FROM stat.time WHERE timestamp = '" + t + "' AND granularity LIKE '" + granularity + "'")
     if fk_time_id == None:
         print("Error getting fk_time_id with psycopg2")
     elif len(fk_time_id) == 0:
@@ -931,7 +945,7 @@ for repository_name in listOfRepositories:
                                 col_types=db_attributes_types, id_col_name='id', constraints_str=constraints)
 
                 log_print_step("Integrate CSV in database")
-                file = open(tabular_file_path, "r")
+                file = open(tabular_file_path, "r", encoding='utf-8-sig')
                 csv.register_dialect('custom', delimiter=delimiter, doublequote=double_quote) # lineterminator=lineterminator
                 reader = csv.DictReader(f=file, dialect='custom')
 
@@ -946,6 +960,7 @@ for repository_name in listOfRepositories:
                         try:
                             att = row[name]
                         except:
+                            print(name, ' attribute does not match a column name ', row)
                             continue
 
                         # check type
