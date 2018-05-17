@@ -37,8 +37,8 @@ stat_schema = 'stat'  # 'stat' on production/dev database
 geo_schema = 'geo'  # 'geo' on production/dev database
 
 # geo tables
-lau_table_name = 'lau2'
-lau_table = 'geo' + '.' + lau_table_name # change to geo_schema when lau table has been moved in db
+lau_table_name = 'lau'
+lau_table = 'public' + '.' + lau_table_name # change to geo_schema when lau table has been moved in db
 nuts_table_name = 'nuts'
 nuts_table = geo_schema + '.' + nuts_table_name
 vector_SRID = "3035"
@@ -298,7 +298,7 @@ for subgroup in subgroups:
 # listOfRepositories.remove('.git')
 # TODO uncomment previous code to automatically integrate all datasets
 listOfRepositories = [
-    'electricity_generation_yearly']
+    'climate_wind_speed']
 
 log_print_step("Datapackage validation script")
 # Validate_Datapackage
