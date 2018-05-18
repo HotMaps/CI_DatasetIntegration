@@ -118,14 +118,14 @@ def parse_date(str):
 
 def get_or_create_time_id(timestamp, granularity):
     t = timestamp
-    date = None
+    d = None
     try:
-        date = parse_date(timestamp)
+        d = parse_date(timestamp)
     except ValueError:
         raise
 
     if date is not None:
-        t = datetime.strftime(date, '%Y/%m/%d %H:%M:%S')
+        t = datetime.strftime(d, '%Y/%m/%d %H:%M:%S')
 
     fk_time_id = db.query(commit=True,
                           query="SELECT id FROM stat.time WHERE timestamp = '" + t + "' AND granularity LIKE '" + granularity + "'")
@@ -224,7 +224,7 @@ def import_shapefile(src_file, date):
 
 # connect to databaselistOfRepositories
 db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
-verbose = True
+verbose = False
 
 # check repository on gitlab
 
@@ -298,7 +298,7 @@ for subgroup in subgroups:
 # listOfRepositories.remove('.git')
 # TODO uncomment previous code to automatically integrate all datasets
 listOfRepositories = [
-    'climate_wind_speed']
+    'climate_heating_cooling_degreeday']
 
 log_print_step("Datapackage validation script")
 # Validate_Datapackage
@@ -343,7 +343,7 @@ for repository_name in listOfRepositories:
         gis_data_type = dp['profile']
         gis_resources = dp['resources']
         dataset_version = dp['version']
-        table_name = dp['name'].lower().replace("hotmaps", "").replace(".", "_").replace(";", "_").replace("-", "_")
+        table_name = dp['name'].lower().replace("hotmaps", "").replace(".", "_").replace(";", "_").replace("-", "_").replace(" ", "_")
 
         print(dp)
         print(table_name)
@@ -354,7 +354,7 @@ for repository_name in listOfRepositories:
             name = r['name']
             path = r['path']
             # date = r['date']
-            raster_table_name = name.lower().replace("hotmaps", "").replace(".", "_").replace(";", "_").replace("-", "_")
+            raster_table_name = name.lower().replace("hotmaps", "").replace(".", "_").replace(";", "_").replace("-", "_").replace(" ", "_")
             precomputed_table_name_lau = raster_table_name + "_" + lau_table_name
             precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name
 
@@ -1050,8 +1050,14 @@ for repository_name in listOfRepositories:
                     geom_cols = ''
                     geom_join = ''
 
+				# filter column names already present in spatial table
+                split_spatial_tbl = spatial_table.split('.')
+                results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
+                vect_col_names = [e[0] for e in results]
+                view_col_names = [e for e in db_attributes_names if e.lower() not in vect_col_names]
+                print(vect_col_names, view_col_names)
                 query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
-                        'AS SELECT ' + table_name + '.*' + time_cols + geom_cols + ' ' + \
+                        'AS SELECT ' + ', '.join(view_col_names) + time_cols + geom_cols + ' ' + \
                         'FROM ' + stat_schema + '.' + table_name + \
                         time_join + geom_join + \
                         ';'
