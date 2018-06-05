@@ -99,10 +99,17 @@ def post_issue(name, description):
         description=description
     )
 
-
 def post_issue_repo(project, name, description):
     issue = project.issues.create({'title': name, 'description': description})
 
+
+def get_property_datapackage(obj, property_name, repo_name, resource_name):
+    try:
+        vector = obj[property_name]
+    except:
+        post_issue(name='Integration of resource failed - repository ' + repo_name,
+                   description='No vector attribute provided for resource "' + resource_name + '". The resource has been skipped.'
+                             + 'Make sure that "' + property_name + '" attribute is correctly declared in the "datapackage.json" file')
 
 def parse_date(str):
     for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S',
@@ -228,8 +235,8 @@ verbose = False
 
 # check repository on gitlab
 
-#repo_date = datetime.utcnow()-timedelta(days=1)  #permet de récupérer les datasats des 24 dernières heures
-repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets.
+repo_date = datetime.utcnow()-timedelta(days=1)  #permet de récupérer les datasats des 24 dernières heures
+#repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets.
 dateStr = repo_date.isoformat(sep='T')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token=GIT_token)
 
@@ -251,83 +258,76 @@ for subgroup in subgroups:
     hotmapsGroups.append(gl.groups.get(subgroup.id, lazy=True))
 
 
-# for group in hotmapsGroups:
-#         projects = group.projects.list(all=True)
-#         print(projects)
-#
-#         for project in projects:
-#
-#             proj = gl.projects.get(id=project.id)
-#
-#             commits = proj.commits.list(since=dateStr)
-#             #print(proj)
-#             try:
-#                #f = proj.files.get(file_path='datapackage.json', ref='master')
-#                #print(f.content)
-#
-#                if len(commits) == 0:
-#                    print('No commit')
-#                else:
-#                    repository_name = proj.name
-#                    repository_path = os.path.join(repositories_base_path, repository_name)
-#                    listOfRepositories.append(proj.name)
-#                    print(repository_name)
-#
-#                    if os.path.exists(repository_path):
-#                        # git pull
-#                        print('update repository')
-#                        g = git.cmd.Git(repository_path)
-#                        g.pull()
-#                        print('successfuly updated repository')
-#
-#                    else:
-#                        # git clone
-#                        print('clone repository')
-#                        url = proj.http_url_to_repo
-#                        #print(url)
-#                        Repo.clone_from(url, repository_path)
-#                        print('successfuly cloned repository')
-#
-#             except:
-#                 print('No datapackage.json or in a wrong place')
-#                 post_issue(name='Validation failed - repository ' + repository_name,
-#                            description='No file "datapackage.json" at the root of the repository. Please check that the file is present and in the correct directory (root).')
-#
-#
-#
-# listOfRepositories.remove('.git')
-# TODO uncomment previous code to automatically integrate all datasets
-listOfRepositories = [
-    'climate_heating_cooling_degreeday']
+for group in hotmapsGroups:
+        projects = group.projects.list(all=True)
+        print(projects)
+
+        for project in projects:
+
+            proj = gl.projects.get(id=project.id)
+
+            commits = proj.commits.list(since=dateStr)
+            #print(proj)
+            try:
+               #f = proj.files.get(file_path='datapackage.json', ref='master')
+               #print(f.content)
+
+               if len(commits) == 0:
+                   print('No commit')
+               else:
+                   repository_name = proj.name
+                   repository_path = os.path.join(repositories_base_path, repository_name)
+                   listOfRepositories.append(proj.name)
+                   print(repository_name)
+
+                   if os.path.exists(repository_path):
+                       # git pull
+                       print('update repository')
+                       g = git.cmd.Git(repository_path)
+                       g.pull()
+                       print('successfuly updated repository')
+
+                   else:
+                       # git clone
+                       print('clone repository')
+                       url = proj.http_url_to_repo
+                       #print(url)
+                       Repo.clone_from(url, repository_path)
+                       print('successfuly cloned repository')
+
+            except:
+                print('No datapackage.json or in a wrong place')
+                post_issue(name='Validation failed - repository ' + repository_name,
+                           description='No file "datapackage.json" at the root of the repository. Please check that the file is present and in the correct directory (root).')
+
+
+
+listOfRepositories.remove('.git')
 
 log_print_step("Datapackage validation script")
 # Validate_Datapackage
-# try:
-#     list_dirs = [name for name in os.listdir(GIT_base_path) if os.path.isdir(os.path.join(GIT_base_path, name))]
-#     list_dirs = sorted(list_dirs)
-#     for d in list_dirs:
-#         d_file_path = os.path.join(repositories_base_path, d, 'datapackage.json')
-#         print(d_file_path)
-#         print()
-#         print("#########################")
-#         # validate_datapackage.print(d, bcolors.HEADER)
-#         print(d)
-#         print("#########################")
-#         if validate_datapackage.validate_datapackage(d_file_path) == False:
-#             print(d + ' has been removed')
-#             listOfRepositories.remove(d)
-#             post_issue(name='Validation failed - repository ' + repository_name,
-#                        description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
-#
-# except Exception as e:
-#     print(d + ' has been removed')
-#     listOfRepositories.remove(d)
-#     post_issue(name='Validation failed - repository ' + repository_name,
-#                description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
+try:
+    list_dirs = [name for name in os.listdir(GIT_base_path) if os.path.isdir(os.path.join(GIT_base_path, name))]
+    list_dirs = sorted(list_dirs)
+    for d in list_dirs:
+        d_file_path = os.path.join(repositories_base_path, d, 'datapackage.json')
+        print(d_file_path)
+        print()
+        print("#########################")
+        # validate_datapackage.print(d, bcolors.HEADER)
+        print(d)
+        print("#########################")
+        if validate_datapackage.validate_datapackage(d_file_path) == False:
+            print(d + ' has been removed')
+            listOfRepositories.remove(d)
+            post_issue(name='Validation failed - repository ' + repository_name,
+                       description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
 
-#listOfRepositories.remove('temperature_profile_daily_avg_household_yearlong_2010')
-#listOfRepositories.remove('temperature_profile_daily_avg_industry_yearlong_2010')
-#listOfRepositories.remove('scen_ambitious_building_demand')
+except Exception as e:
+    print(d + ' has been removed')
+    listOfRepositories.remove(d)
+    post_issue(name='Validation failed - repository ' + repository_name,
+               description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
 
 for repository_name in listOfRepositories:
     log_print_step("Start integration of " + repository_name)

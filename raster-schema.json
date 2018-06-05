@@ -347,79 +347,23 @@
             "default": "",
             "examples": [
               "utf-8"
-            ]
-          },
-          "schema": {
-            "$id": "/properties/resources/items/properties/schema",
+          ],
+          "raster": {
+            "$id": "/properties/resources/items/properties/raster",
             "type": "object",
             "properties": {
-              "fields": {
-                "$id": "/properties/resources/items/properties/schema/properties/fields",
-                "type": "array",
-                "items": {
-                  "$id": "/properties/resources/items/properties/schema/properties/fields/items",
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "$id": "/properties/resources/items/properties/schema/properties/fields/items/properties/name",
-                      "type": "string",
-                      "title": "The Name Schema",
-                      "description": "An explanation about the purpose of this instance.",
-                      "default": "",
-                      "examples": [
-                        "NUTS0_code"
-                      ]
-                    },
-                    "type": {
-                      "$id": "/properties/resources/items/properties/schema/properties/fields/items/properties/type",
-                      "type": "string",
-                      "title": "The Type Schema",
-                      "description": "An explanation about the purpose of this instance.",
-                      "default": "",
-                      "examples": [
-                        "string"
-                      ]
-                    },
-                    "unit": {
-                      "$id": "/properties/resources/items/properties/schema/properties/fields/items/properties/unit",
-                      "type": "string",
-                      "title": "The Unit Schema",
-                      "description": "An explanation about the purpose of this instance.",
-                      "default": "",
-                      "examples": [
-                        ""
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "dialect": {
-            "$id": "/properties/resources/items/properties/dialect",
-            "type": "object",
-            "properties": {
-              "delimiter": {
-                "$id": "/properties/resources/items/properties/dialect/properties/delimiter",
+              "epsg": {
+                "$id": "/properties/resources/items/properties/raster/properties/epsg",
                 "type": "string",
-                "title": "The Delimiter Schema",
-                "description": "An explanation about the purpose of this instance.",
+                "title": "The projection as EPSG value",
+                "description": "The projection of the raster as EPSG number",
                 "default": "",
                 "examples": [
-                  ","
-                ]
-              },
-              "doubleQuote": {
-                "$id": "/properties/resources/items/properties/dialect/properties/doubleQuote",
-                "type": "boolean",
-                "title": "The Doublequote Schema",
-                "description": "An explanation about the purpose of this instance.",
-                "default": false,
-                "examples": [
-                  true
+                  "3035", "4326"
                 ]
               }
-            }
+          },
+            "required": ["epsg"]
           }
         },
         "required": [
@@ -427,7 +371,8 @@
           "title",
           "path",
           "description",
-          "format"
+          "format",
+          "raster"
         ]
       }
     }
