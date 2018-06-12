@@ -18,6 +18,7 @@ import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
 import requests
 import gitlab
+from gitlab import GitlabError, GitlabAuthenticationError, GitlabConnectionError, GitlabHttpError
 import logging
 from time import time, strftime, gmtime
 from taiga import TaigaAPI
@@ -31,7 +32,7 @@ print(strftime("Execution start time: %Y-%m-%d %H:%M:%S +0000", gmtime(log_start
 taiga_api = TaigaAPI(token=TAIGA_token)
 taiga_project = taiga_api.projects.get_by_slug('widmont-hotmaps')
 logging.basicConfig(level=logging.INFO)
-
+taiga_api = None
 # schemas
 stat_schema = 'stat'  # 'stat' on production/dev database
 geo_schema = 'geo'  # 'geo' on production/dev database
@@ -53,10 +54,6 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 
 # git repositories path
 repositories_base_path = GIT_base_path
-repository_name = 'vol_res_curr_density'
-listOfRepositories = []
-repository_path = os.path.join(repositories_base_path, repository_name)
-print(repository_path)
 
 # README
 # To test this script localy, run the following script before
@@ -89,19 +86,18 @@ def log_print_step(text):
     print("Ellapsed time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
     log_previous_time = log_end_time
 
-def post_issue(name, description):
+def post_issue(name, description, issue_type='Dataset integration'):
     issue = taiga_project.add_issue(
         name,
         taiga_project.priorities.get(name='Workaround possible - Low').id,
         taiga_project.issue_statuses.get(name='New').id,
-        taiga_project.issue_types.get(name='Dataset integration').id,
+        taiga_project.issue_types.get(name=issue_type).id,
         taiga_project.severities.get(name='Minor').id,
         description=description
     )
 
 def post_issue_repo(project, name, description):
     issue = project.issues.create({'title': name, 'description': description})
-
 
 def get_property_datapackage(obj, property_name, repo_name, resource_name):
     try:
@@ -189,6 +185,33 @@ def get_or_create_time_id(timestamp, granularity):
 
     return fk_time_id
 
+def update_or_create_repo(repo_name, git_id):
+    r = repo_name
+    d = datetime.now()
+    d_str = d.strftime('%Y-%m-%d')
+
+    repo_id = db.query( commit=True,
+                        query="SELECT id FROM public.repo WHERE name LIKE '" + r + "' AND git_id = '" + git_id + "'")
+
+    if repo_id == None:
+        print("Error getting repo_id with psycopg2")
+    elif len(repo_id) == 0:
+        repo_attributes = [repo_name, git_id]
+        timestamp_att = parse_date(timestamp)
+        repo_attributes.append(d_str)
+        repo_attributes.append(d_str)
+
+        repo_id = db.query( commit=True,
+                            query='INSERT INTO public.repo ' +
+                            '(name, git_id, created, updated) ' +
+                            'VALUES (' + ', '.join(map(str_with_single_quotes, repo_attributes)) + ') RETURNING id')
+
+    if len(repo_id) > 0 and len(repo_id[0]) > 0:
+        repo_id = repo_id[0][0]
+        db.query(commit=True,
+                 query="UPDATE public.repo SET updated = " + d_str + " WHERE id = " + repo_id)
+
+    return repo_id
 
 def import_shapefile(src_file, date):
     # import shp
@@ -233,21 +256,26 @@ def import_shapefile(src_file, date):
 db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
 verbose = False
 
+# create table repo (integration status)
+db.create_table(table_name='public' + '.' + 'repo', col_names=['name', 'git_id', 'created', 'updated'],
+                col_types=['varchar(255)', 'bigint', 'timestamp', 'timestamp'], id_col_name='id')
+
 # check repository on gitlab
 
-repo_date = datetime.utcnow()-timedelta(days=1)  #permet de récupérer les datasats des 24 dernières heures
+repo_date = datetime.utcnow()-timedelta(days=3)  #permet de récupérer les datasats des 24 dernières heures
 #repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets.
 dateStr = repo_date.isoformat(sep='T')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token=GIT_token)
 
 hotmapsGroups = []
 listOfRepositories = []
+listOfRepoIds = []
 
 allGroups = gl.groups.list()
 
 group = gl.groups.get('1354895')
 hotmapsGroups.append(group)
-print(group.id)
+#print('gitlab group #' + group.id)
 
 subgroups = group.subgroups.list()
 
@@ -259,77 +287,194 @@ for subgroup in subgroups:
 
 
 for group in hotmapsGroups:
-        projects = group.projects.list(all=True)
-        print(projects)
+    projects = group.projects.list(all=True)
+    print(projects)
 
-        for project in projects:
+    for project in projects:
+        proj = gl.projects.get(id=project.id)
+        commits = proj.commits.list(since=dateStr)
+        try:
+           if len(commits) == 0:
+               print('No recent commit for repository ' + proj.name)
+           else:
+               repository_name = proj.name
+               repository_path = os.path.join(repositories_base_path, repository_name)
+               listOfRepositories.append(proj.name)
+               listOfRepoIds.append(proj.id)
+               print('New commit found for repository ' + repository_name)
 
-            proj = gl.projects.get(id=project.id)
-
-            commits = proj.commits.list(since=dateStr)
-            #print(proj)
-            try:
-               #f = proj.files.get(file_path='datapackage.json', ref='master')
-               #print(f.content)
-
-               if len(commits) == 0:
-                   print('No commit')
+               if os.path.exists(repository_path):
+                   # git pull
+                   print('update repository')
+                   g = git.cmd.Git(repository_path)
+                   g.pull()
+                   print('successfuly updated repository')
                else:
-                   repository_name = proj.name
-                   repository_path = os.path.join(repositories_base_path, repository_name)
-                   listOfRepositories.append(proj.name)
-                   print(repository_name)
+                   # git clone
+                   print('clone repository')
+                   url = proj.http_url_to_repo
+                   Repo.clone_from(url, repository_path)
+                   print('successfuly cloned repository')
+        except (GitlabAuthenticationError, GitlabConnectionError, GitlabHttpError) as e:
+            print('Error while updating repository ' + proj.name + ' (#' + proj.id + ')')
+            post_issue(name='Gitlab error for repository ' + repository_name,
+                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: ' + e.args,
+                       issue_type='Integration script execution')
+        except Exception as e:
+            print('Error while updating repository ' + proj.name + ' (#' + proj.id + ')')
+            post_issue(name='Script error for repository ' + repository_name,
+                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: ' + e.args,
+                       issue_type='Integration script execution')
 
-                   if os.path.exists(repository_path):
-                       # git pull
-                       print('update repository')
-                       g = git.cmd.Git(repository_path)
-                       g.pull()
-                       print('successfuly updated repository')
-
-                   else:
-                       # git clone
-                       print('clone repository')
-                       url = proj.http_url_to_repo
-                       #print(url)
-                       Repo.clone_from(url, repository_path)
-                       print('successfuly cloned repository')
-
-            except:
-                print('No datapackage.json or in a wrong place')
-                post_issue(name='Validation failed - repository ' + repository_name,
-                           description='No file "datapackage.json" at the root of the repository. Please check that the file is present and in the correct directory (root).')
-
-
-
-listOfRepositories.remove('.git')
-
-log_print_step("Datapackage validation script")
-# Validate_Datapackage
 try:
-    list_dirs = [name for name in os.listdir(GIT_base_path) if os.path.isdir(os.path.join(GIT_base_path, name))]
-    list_dirs = sorted(list_dirs)
-    for d in list_dirs:
-        d_file_path = os.path.join(repositories_base_path, d, 'datapackage.json')
-        print(d_file_path)
-        print()
-        print("#########################")
-        # validate_datapackage.print(d, bcolors.HEADER)
-        print(d)
-        print("#########################")
-        if validate_datapackage.validate_datapackage(d_file_path) == False:
-            print(d + ' has been removed')
-            listOfRepositories.remove(d)
-            post_issue(name='Validation failed - repository ' + repository_name,
-                       description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
+    listOfRepositories.remove('.git')
+except:
+    pass
 
-except Exception as e:
-    print(d + ' has been removed')
-    listOfRepositories.remove(d)
-    post_issue(name='Validation failed - repository ' + repository_name,
-               description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
-
+repo_index = 0
 for repository_name in listOfRepositories:
+    """
+        VALIDATION
+    """
+    log_print_step("Validation of " + repository_name)
+
+    # check that repository path is correct
+    repo_path = os.path.join(repositories_base_path, repository_name)
+    if not os.path.isdir(repo_path):
+        print('repo_path is not a directory')
+
+    content = os.listdir('.')
+
+    # check that datapackage file is not missing
+    dp_file_path = os.path.join(repo_path, 'datapackage.json')
+    if not os.path.isfile(dp_file_path):
+        print('datapackage.json file missing or not in correct directory')
+
+    # check that data directory is present
+    data_dir_path = os.path.join(repo_path, 'data')
+    if not os.path.isdir(data_dir_path):
+        print('data directory missing')
+
+    # check datapackage file
+    #is_valid = validate_datapackage.validate_datapackage(dp_file_path)
+    #if is_valid is not True:
+        #print(is_valid)
+        #print(d + ' has been removed')
+        #listOfRepositories.remove(d)
+        #post_issue(name='Validation failed - repository ' + repository_name,
+        #           description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
+
+    # check properties
+    missing_properties = []
+    error_messages = []
+
+    # open file
+    try:
+        dp = json.load(open(dp_file_path))
+    except:
+        print('can\'t open file datapackage.json')
+        dp = {}
+    # profile
+    try:
+        dp_profile = dp['profile']
+    except:
+        missing_properties.append('profile')
+    # resources
+    try:
+        dp_resources = dp['resources']
+    except:
+        missing_properties.append('resources')
+
+    # check resources attributes
+    if dp_resources:
+        if dp_profile == 'vector-data-resource':
+            for dp_r in dp_resources:
+                print('vector-data-resource')
+                props = ['name', 'path', 'format', 'unit']
+                for p in props:
+                    try:
+                        a = dp_r[p]
+                    except:
+                        missing_properties.append('resources/' + p)
+                try:
+                    dp_path = dp_r['path']
+                    if not os.path.isfile(os.join(repo_path, dp_path)):
+                        error_messages.append('attribute path does not link to an existing file')
+                except:
+                    pass
+        elif dp_profile == 'raster-data-resource':
+            print('raster-data-resource')
+            for dp_r in dp_resources:
+                props = ['name', 'path', 'unit', 'format', 'raster']
+                for p in props:
+                    try:
+                        a = dp_r[p]
+                    except:
+                        missing_properties.append('resources/' + p)
+                try:
+                    dp_path = dp_r['path']
+                    if not os.path.exists(os.join(repo_path, dp_path)):
+                        error_messages.append('attribute path does not link to an existing file')
+                except:
+                    pass
+                try:
+                    dp_raster = dp_r['raster']
+                    dp_epsg = dp_raster['epsg']
+                except:
+                    missing_properties.append('raster/epsg')
+        elif dp_profile == 'tabular-data-resource':
+            print('tabular-data-resource')
+            for dp_r in dp_resources:
+                props = ['name', 'path', 'schema', 'encoding', 'format', 'dialect']
+                for p in props:
+                    try:
+                        a = dp_r[p]
+                    except:
+                        missing_properties.append('resources/' + p)
+                # fields
+                has_geom = False
+                f_col_names = []
+                try:
+                    dp_schema = dp_r['schema']
+                    if 'fields' in dp_schema:
+                        dp_fields = dp_schema['fields']
+                        if len(dp_fields) > 0:
+                            for f in dp_fields:
+                                f_name = f['name']
+                                f_unit = f['unit']
+                                f_type = f['type']
+                                if f_type == 'geometry':
+                                    has_geom = True
+                                f_col_names.append(f_name)
+                    else:
+                        missing_properties.append('fields')
+                except:
+                    error_messages.append('errors in schema definition (schema: fields: [{name, unit, type},...])')
+                # geoms
+                if 'spatial_resolution' in dp_r and 'spatial_key_field' in dp_r:
+                    if dp_r['spatial_key_field'] not in f_col_names:
+                        error_messages.append('spatial_key_field does not refer to an existing field name')
+                else:
+                    if not has_geom:
+                        error_messages.append('no geometry provided (nuts/lau reference or geometry field)')
+        else:
+            err_msg = '\'profile\' contains an unsupported value! Use only vector-data-resource, raster-data-resource or tabular-data-resource'
+            print(err_msg)
+            error_messages.append(err_msg)
+
+    if len(error_messages) + len(missing_properties) > 0:
+        str_error_messages = ''
+        if len(error_messages) > 0:
+            str_error_messages = 'Errors: \n' + '\n'.join(error_messages)
+            if len(missing_properties) > 0:
+                str_error_messages = str_error_messages + '\n'
+        if len(missing_properties) > 0:
+            str_error_messages = 'Missing properties: \n' + '\n'.join(missing_properties)
+        print('Validation error for repository ' + repository_name + '\n' + str_error_messages)
+        post_issue(name='Validation error ' + repository_name,
+                   description='The repository validation was not successful.\n' + str_error_messages)
+        continue
+
     log_print_step("Start integration of " + repository_name)
     log_start_repo_time = log_previous_time
 
@@ -1106,6 +1251,9 @@ for repository_name in listOfRepositories:
 
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
+
+            update_or_create_repo(repository_name, listOfRepoIds[repo_index])
+            repo_index = repo_index + 1
 
             print("End of integration of repository ", repository_name)
             log_end_time = time()
