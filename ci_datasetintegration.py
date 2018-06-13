@@ -403,6 +403,11 @@ for repository_name in listOfRepositories:
                         error_messages.append('attribute path does not link to an existing file')
                 except:
                     pass
+                try:
+                    dp_vector = dp_r['vector']
+                    dp_epsg = dp_vector['epsg']
+                except:
+                    missing_properties.append('vector/epsg')
         elif dp_profile == 'raster-data-resource':
             print('raster-data-resource')
             for dp_r in dp_resources:
