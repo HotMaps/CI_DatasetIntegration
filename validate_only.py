@@ -331,6 +331,15 @@ for repository_name in listOfRepositories:
     if not os.path.isdir(data_dir_path):
         print('data directory missing')
 
+    # check datapackage file
+    #is_valid = validate_datapackage.validate_datapackage(dp_file_path)
+    #if is_valid is not True:
+        #print(is_valid)
+        #print(d + ' has been removed')
+        #listOfRepositories.remove(d)
+        #post_issue(name='Validation failed - repository ' + repository_name,
+        #           description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
+
     # check properties
     missing_properties = []
     error_messages = []
@@ -358,7 +367,7 @@ for repository_name in listOfRepositories:
         if dp_profile == 'vector-data-resource':
             for dp_r in dp_resources:
                 print('vector-data-resource')
-                props = ['name', 'path', 'format', 'unit']
+                props = ['name', 'path', 'format', 'unit', 'vector']
                 for p in props:
                     try:
                         a = dp_r[p]
@@ -375,6 +384,25 @@ for repository_name in listOfRepositories:
                     dp_epsg = dp_vector['epsg']
                 except:
                     missing_properties.append('vector/epsg')
+                try:
+                    dp_vector = dp_r['vector']
+                    dp_geometry_type = dp_vector['geometry_type']
+                    if dp_geometry_type.lower() == 'polygon':
+                        dp_geometry_type = 'MultiPolygon'
+                    elif dp_geometry_type.lower() == 'multipolygon':
+                        dp_geometry_type = 'MultiPolygon'
+                    elif dp_geometry_type.lower() == 'point':
+                        dp_geometry_type = 'Point'
+                    elif dp_geometry_type.lower() == 'multipoint':
+                        dp_geometry_type = 'MultiPoint'
+                    elif dp_geometry_type.lower() == 'multilinestring':
+                        dp_geometry_type = 'MultiLinestring'
+                    elif dp_geometry_type.lower() == 'linestring':
+                        dp_geometry_type = 'Linestring'
+                    else:
+                        error_messages.append('geometry_type is not set correctly (must be either (multi)point, (multi)linestring or (multi)polygon)')
+                except:
+                    missing_properties.append('vector/geometry_type')
         elif dp_profile == 'raster-data-resource':
             print('raster-data-resource')
             for dp_r in dp_resources:
@@ -386,12 +414,7 @@ for repository_name in listOfRepositories:
                         missing_properties.append('resources/' + p)
                 try:
                     dp_path = dp_r['path']
-                                try:
-                    dp_vector = dp_r['vector']
-                    dp_epsg = dp_vector['epsg']
-                except:
-                    missing_properties.append('vector/epsg')
-    if not os.path.exists(os.join(repo_path, dp_path)):
+                    if not os.path.exists(os.join(repo_path, dp_path)):
                         error_messages.append('attribute path does not link to an existing file')
                 except:
                     pass

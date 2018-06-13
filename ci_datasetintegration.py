@@ -391,7 +391,7 @@ for repository_name in listOfRepositories:
         if dp_profile == 'vector-data-resource':
             for dp_r in dp_resources:
                 print('vector-data-resource')
-                props = ['name', 'path', 'format', 'unit']
+                props = ['name', 'path', 'format', 'unit', 'vector']
                 for p in props:
                     try:
                         a = dp_r[p]
@@ -408,6 +408,25 @@ for repository_name in listOfRepositories:
                     dp_epsg = dp_vector['epsg']
                 except:
                     missing_properties.append('vector/epsg')
+                try:
+                    dp_vector = dp_r['vector']
+                    dp_geometry_type = dp_vector['geometry_type']
+                    if dp_geometry_type.lower() == 'polygon':
+                        dp_geometry_type = 'MultiPolygon'
+                    elif dp_geometry_type.lower() == 'multipolygon':
+                        dp_geometry_type = 'MultiPolygon'
+                    elif dp_geometry_type.lower() == 'point':
+                        dp_geometry_type = 'Point'
+                    elif dp_geometry_type.lower() == 'multipoint':
+                        dp_geometry_type = 'MultiPoint'
+                    elif dp_geometry_type.lower() == 'multilinestring':
+                        dp_geometry_type = 'MultiLinestring'
+                    elif dp_geometry_type.lower() == 'linestring':
+                        dp_geometry_type = 'Linestring'
+                    else:
+                        error_messages.append('geometry_type is not set correctly (must be either (multi)point, (multi)linestring or (multi)polygon)')
+                except:
+                    missing_properties.append('vector/geometry_type')
         elif dp_profile == 'raster-data-resource':
             print('raster-data-resource')
             for dp_r in dp_resources:
@@ -566,6 +585,19 @@ for repository_name in listOfRepositories:
                 # convert Polygon type to MultiPolygon
                 if geom_type.lower() == 'polygon':
                     geom_type = 'MultiPolygon'
+                elif geom_type.lower() == 'multipolygon':
+                    geom_type = 'MultiPolygon'
+                elif geom_type.lower() == 'point':
+                    geom_type = 'Point'
+                elif geom_type.lower() == 'multipoint':
+                    geom_type = 'MultiPoint'
+                elif geom_type.lower() == 'multilinestring':
+                    geom_type = 'MultiLinestring'
+                elif geom_type.lower() == 'linestring':
+                    geom_type = 'Linestring'
+                else:
+                    print('geometry_type is not set correctly')
+
 
                 db_attributes_types.append('geometry(' + geom_type + ', ' + proj + ')')
 
