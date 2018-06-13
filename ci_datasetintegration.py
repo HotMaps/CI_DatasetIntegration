@@ -429,11 +429,11 @@ for repository_name in listOfRepositories:
                     missing_properties.append('vector/geometry_type')
                 try:
                     dp_schema = dp_r['schema']
-                        if len(dp_schema) > 0:
-                            for f in dp_schema:
-                                f_name = f['name']
-                                f_unit = f['unit']
-                                f_type = f['type']
+                    if len(dp_schema) > 0:
+                        for f in dp_schema:
+                            f_name = f['name']
+                            f_unit = f['unit']
+                            f_type = f['type']
                 except:
                     error_messages.append('errors in schema definition (schema: [{name, unit, type},...])')
         elif dp_profile == 'raster-data-resource':
