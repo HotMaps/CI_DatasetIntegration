@@ -208,7 +208,7 @@ def update_or_create_repo(repo_name, git_id):
     if len(repo_id) > 0 and len(repo_id[0]) > 0:
         repo_id = repo_id[0][0]
         db.query(commit=True,
-                 query="UPDATE public.repo SET updated = " + d_str + " WHERE id = " + str(repo_id))
+                 query="UPDATE public.repo SET updated = '" + d_str + "' WHERE id = " + str(repo_id))
 
     return repo_id
 
