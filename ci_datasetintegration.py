@@ -391,7 +391,7 @@ for repository_name in listOfRepositories:
         if dp_profile == 'vector-data-resource':
             for dp_r in dp_resources:
                 print('vector-data-resource')
-                props = ['name', 'path', 'format', 'unit', 'vector', 'schema']
+                props = ['name', 'path', 'format', 'unit', 'vector']
                 for p in props:
                     try:
                         a = dp_r[p]
@@ -428,7 +428,11 @@ for repository_name in listOfRepositories:
                 except:
                     missing_properties.append('vector/geometry_type')
                 try:
-                    dp_schema = dp_r['schema']
+                    dp_schema = dp_vector['schema']
+                except:
+                    missing_properties.append('vector/schema')
+                try:
+                    dp_schema = dp_vector['schema']
                     if len(dp_schema) > 0:
                         for f in dp_schema:
                             f_name = f['name']

@@ -404,7 +404,11 @@ for repository_name in listOfRepositories:
                 except:
                     missing_properties.append('vector/geometry_type')
                 try:
-                    dp_schema = dp_r['schema']
+                    dp_schema = dp_vector['schema']
+                except:
+                    missing_properties.append('vector/schema')
+                try:
+                    dp_schema = dp_vector['schema']
                     if len(dp_schema) > 0:
                         for f in dp_schema:
                             f_name = f['name']
