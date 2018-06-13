@@ -327,6 +327,9 @@ for group in hotmapsGroups:
                        issue_type='Integration script execution')
 
 try:
+    listOfRepositories.remove('HotmapsLAU')
+    listOfRepositories.remove('lau2')
+    listOfRepositories.remove('NUTS')
     listOfRepositories.remove('.git')
 except:
     pass
