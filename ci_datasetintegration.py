@@ -197,7 +197,6 @@ def update_or_create_repo(repo_name, git_id):
         print("Error getting repo_id with psycopg2")
     elif len(repo_id) == 0:
         repo_attributes = [repo_name, str(git_id)]
-        timestamp_att = parse_date(timestamp)
         repo_attributes.append(d_str)
         repo_attributes.append(d_str)
 
