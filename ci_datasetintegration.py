@@ -196,7 +196,7 @@ def update_or_create_repo(repo_name, git_id):
     if repo_id == None:
         print("Error getting repo_id with psycopg2")
     elif len(repo_id) == 0:
-        repo_attributes = [repo_name, git_id]
+        repo_attributes = [repo_name, str(git_id)]
         timestamp_att = parse_date(timestamp)
         repo_attributes.append(d_str)
         repo_attributes.append(d_str)
@@ -209,7 +209,7 @@ def update_or_create_repo(repo_name, git_id):
     if len(repo_id) > 0 and len(repo_id[0]) > 0:
         repo_id = repo_id[0][0]
         db.query(commit=True,
-                 query="UPDATE public.repo SET updated = " + d_str + " WHERE id = " + repo_id)
+                 query="UPDATE public.repo SET updated = " + d_str + " WHERE id = " + str(repo_id))
 
     return repo_id
 
