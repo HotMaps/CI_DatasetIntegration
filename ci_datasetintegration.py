@@ -1319,6 +1319,7 @@ for repository_name in listOfRepositories:
             print("Duration of integration: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
 
     except Exception as e:
+        print(str(e))
         logging.error(traceback.format_exc())
         post_issue(name='Integration failed - repository ' + repository_name,
                    description='A problem occurred during the integration process of the repository. Please contact the development team.')
