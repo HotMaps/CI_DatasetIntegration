@@ -191,7 +191,7 @@ def update_or_create_repo(repo_name, git_id):
     d_str = d.strftime('%Y-%m-%d')
 
     repo_id = db.query( commit=True,
-                        query="SELECT id FROM public.repo WHERE name LIKE '" + r + "' AND git_id = '" + git_id + "'")
+                        query="SELECT id FROM public.repo WHERE name LIKE '" + r + "' AND git_id = '" + str(git_id) + "'")
 
     if repo_id == None:
         print("Error getting repo_id with psycopg2")
