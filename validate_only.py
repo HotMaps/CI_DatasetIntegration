@@ -238,8 +238,8 @@ db.create_table(table_name='public' + '.' + 'repo', col_names=['name', 'git_id',
 
 # check repository on gitlab
 
-repo_date = datetime.utcnow()-timedelta(days=3)  #permet de récupérer les datasats des 24 dernières heures
-#repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets.
+#repo_date = datetime.utcnow()-timedelta(days=3)  #permet de récupérer les datasats des 24 dernières heures
+repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets.
 dateStr = repo_date.isoformat(sep='T')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token=GIT_token)
 
@@ -292,14 +292,14 @@ for group in hotmapsGroups:
                    Repo.clone_from(url, repository_path)
                    print('successfuly cloned repository')
         except (GitlabAuthenticationError, GitlabConnectionError, GitlabHttpError) as e:
-            print('Error while updating repository ' + proj.name + ' (#' + proj.id + ')')
+            print('Error while updating repository ' + proj.name + ' (#' + str(proj.id) + ')')
             post_issue(name='Gitlab error for repository ' + repository_name,
-                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: ' + e.args,
+                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: ' + str(e),
                        issue_type='Integration script execution')
         except Exception as e:
-            print('Error while updating repository ' + proj.name + ' (#' + proj.id + ')')
+            print('Error while updating repository ' + proj.name + ' (#' + str(proj.id) + ')')
             post_issue(name='Script error for repository ' + repository_name,
-                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: ' + e.args,
+                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: ' + str(e),
                        issue_type='Integration script execution')
 
 try:
@@ -351,6 +351,7 @@ for repository_name in listOfRepositories:
         dp_resources = dp['resources']
     except:
         missing_properties.append('resources')
+        dp_resources = None
 
     # check resources attributes
     if dp_resources:
@@ -423,7 +424,7 @@ for repository_name in listOfRepositories:
                         error_messages.append('spatial_key_field does not refer to an existing field name')
                 else:
                     if not has_geom:
-                        error_messages.append('no geometry provided (nuts/lau reference or geometry field)')
+                        error_messages.append('no geometry provided (nuts/lau reference [attribute spatial_key_field and spatial_resolution] or geometry field)')
         else:
             err_msg = '\'profile\' contains an unsupported value! Use only vector-data-resource, raster-data-resource or tabular-data-resource'
             print(err_msg)
@@ -441,11 +442,8 @@ for repository_name in listOfRepositories:
         post_issue(name='Validation error ' + repository_name,
                    description='The repository validation was not successful.\n' + str_error_messages)
         continue
-
-    except Exception as e:
-        logging.error(traceback.format_exc())
-        post_issue(name='Validation failed - repository ' + repository_name,
-                   description='A problem occurred during the integration process of the repository. Please contact the development team.')
+    else:
+        print('Validation OK')
 
 db.close_connection()
 log_end_time = time()
