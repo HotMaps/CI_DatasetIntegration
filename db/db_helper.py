@@ -52,7 +52,7 @@ class DB(object):
         except psycopg2.Error as e:
             print(e)
             self.close_connection()
-            sys.exit(1)
+            raise
 
     def query(self, query, data=None, commit=False, notices=False):
         try:
@@ -72,7 +72,7 @@ class DB(object):
         except psycopg2.Error as e:
             print(e)
             self.close_connection()
-            sys.exit(1)
+            raise
 
     def insert(self, table, columns, types, values, commit=False, notices=False):
         # check lenght of parameters
@@ -112,6 +112,7 @@ class DB(object):
             self.conn.commit()
         except Exception as e:
             print(e)
+            raise
 
     def create_table(self, table_name, col_names, col_types, constraints_str='', id_col_name='id', notices=False):
         try:
@@ -132,6 +133,7 @@ class DB(object):
             self.conn.commit()
         except Exception as e:
             print(e)
+            raise
 
     def close_connection(self, ):
         self.conn.close()
