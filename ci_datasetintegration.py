@@ -105,7 +105,8 @@ def get_property_datapackage(obj, property_name, repo_name, resource_name):
     except:
         post_issue(name='Integration of resource failed - repository ' + repo_name,
                    description='No vector attribute provided for resource "' + resource_name + '". The resource has been skipped.'
-                             + 'Make sure that "' + property_name + '" attribute is correctly declared in the "datapackage.json" file')
+                             + 'Make sure that "' + property_name + '" attribute is correctly declared in the "datapackage.json" file',
+                   issue_type='Dataset Provider improvement needed')
 
 def parse_date(str):
     for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S',
@@ -377,7 +378,11 @@ for repository_name in listOfRepositories:
         with open(dp_file_path) as f:
             dp = json.load(f)
     except json.decoder.JSONDecodeError as e:
-        print('JSON decoding raised an exception.\n' + str(e))
+        msg = 'JSON decoding raised an exception.\n' + str(e)
+        print(msg)
+        post_issue(name='Validation error ' + repository_name,
+                   description='The repository validation was not successful.\n' + msg,
+                   issue_type='Dataset Provider improvement needed')
         continue
 
     # profile
@@ -516,7 +521,8 @@ for repository_name in listOfRepositories:
             str_error_messages = 'Missing properties: \n' + '\n'.join(missing_properties)
         print('Validation error for repository ' + repository_name + '\n' + str_error_messages)
         post_issue(name='Validation error ' + repository_name,
-                   description='The repository validation was not successful.\n' + str_error_messages)
+                   description='The repository validation was not successful.\n' + str_error_messages,
+                   issue_type='Dataset Provider improvement needed')
         continue
     else:
         print('Validation OK')
