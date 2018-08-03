@@ -86,14 +86,15 @@ def log_print_step(text):
     print("Ellapsed time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
     log_previous_time = log_end_time
 
-def post_issue(name, description, issue_type='Dataset integration'):
+def post_issue(name, description, issue_type='Dataset integration', tags=[]):
     issue = taiga_project.add_issue(
         name,
         taiga_project.priorities.get(name='Workaround possible - Low').id,
         taiga_project.issue_statuses.get(name='New').id,
         taiga_project.issue_types.get(name=issue_type).id,
         taiga_project.severities.get(name='Minor').id,
-        description=description
+        description=description,
+        tags=tags
     )
 
 def post_issue_repo(project, name, description):
@@ -520,9 +521,18 @@ for repository_name in listOfRepositories:
         if len(missing_properties) > 0:
             str_error_messages = 'Missing properties: \n' + '\n'.join(missing_properties)
         print('Validation error for repository ' + repository_name + '\n' + str_error_messages)
+
+        # create tags from contributors (data providers)
+        try:
+            contributors = dp['contributors']
+            tags = (c.title for c in contributors)
+        except:
+            tags = None
+
         post_issue(name='Validation error ' + repository_name,
                    description='The repository validation was not successful.\n' + str_error_messages,
-                   issue_type='Dataset Provider improvement needed')
+                   issue_type='Dataset Provider improvement needed',
+                   tags=tags)
         continue
     else:
         print('Validation OK')
