@@ -1119,22 +1119,30 @@ for repository_name in listOfRepositories:
 
                 constraints = ""
                 if spatial_table is not None:
-                    constraints = constraints + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
+                    # add spatial relationship in table
+                    constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
+                                  + "SELECT 1 FROM pg_constraint WHERE conname = \'" + table_name + "_" + spatial_table_name + "_gid_fkey\') THEN " \
+                                  + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
                                   + "ADD CONSTRAINT " + table_name + "_" + spatial_table_name + "_gid_fkey " \
                                   + "FOREIGN KEY (fk_" + spatial_table_name + "_gid) " \
                                   + "REFERENCES " + spatial_table + "(gid) " \
-                                  + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL ;"
+                                  + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
+                                  + "END IF; END; $$; "
 
                     db_attributes_names.append('fk_' + spatial_table_name + '_gid')
                     db_attributes_types.append('bigint')
 
 
                 if temporal_resolution is not None and len(temporal_resolution) > 0:
-                    constraints = constraints + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
-                                      + "ADD CONSTRAINT " + table_name + "_" + time_table_name + "_id_fkey " \
-                                      + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
-                                      + "REFERENCES " + time_table + "(id) " \
-                                      + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL ;"
+                    # add temporal relationship in table
+                    constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
+                                  + "SELECT 1 FROM pg_constraint WHERE conname = \'" + table_name + "_" + time_table_name + "_id_fkey\') THEN " \
+                                  + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
+                                  + "ADD CONSTRAINT " + table_name + "_" + time_table_name + "_id_fkey " \
+                                  + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
+                                  + "REFERENCES " + spatial_table + "(id) " \
+                                  + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
+                                  + "END IF; END; $$; "
 
                     db_attributes_names.append('fk_' + time_table_name + '_id')
                     db_attributes_types.append('bigint')
@@ -1321,7 +1329,8 @@ for repository_name in listOfRepositories:
         print(str(e))
         logging.error(traceback.format_exc())
         post_issue(name='Integration failed - repository ' + repository_name,
-                   description='A problem occurred during the integration process of the repository. Please contact the development team.')
+                   description='A problem occurred during the integration process of the repository. Please contact the development team.',
+                   issue_type='Integration script execution')
 
 db.close_connection()
 log_end_time = time()
