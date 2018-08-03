@@ -268,7 +268,7 @@ gl = gitlab.Gitlab('https://gitlab.com', private_token=GIT_token)
 
 hotmapsGroups = []
 listOfRepositories = []
-listOfRepoIds = []
+listOfRepoIds = {}
 
 allGroups = gl.groups.list()
 
@@ -299,7 +299,7 @@ for group in hotmapsGroups:
                repository_name = proj.name
                repository_path = os.path.join(repositories_base_path, repository_name)
                listOfRepositories.append(proj.name)
-               listOfRepoIds.append(proj.id)
+               listOfRepoIds[proj.name] = proj.id
                print('New commit found for repository ' + repository_name)
 
                if os.path.exists(repository_path):
@@ -333,7 +333,6 @@ try:
 except:
     pass
 
-repo_index = 0
 for repository_name in listOfRepositories:
     """
         VALIDATION
@@ -1315,8 +1314,7 @@ for repository_name in listOfRepositories:
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
 
-            update_or_create_repo(repository_name, listOfRepoIds[repo_index])
-            repo_index = repo_index + 1
+            update_or_create_repo(repository_name, listOfRepoIds[repository_name])
 
             print("End of integration of repository ", repository_name)
             log_end_time = time()
@@ -1329,7 +1327,7 @@ for repository_name in listOfRepositories:
         print(str(e))
         logging.error(traceback.format_exc())
         post_issue(name='Integration failed - repository ' + repository_name,
-                   description='A problem occurred during the integration process of the repository. Please contact the development team.',
+                   description='A problem occurred during the integration process of the repository. Please contact the development team.\n' + traceback.format_exc(),
                    issue_type='Integration script execution')
 
 db.close_connection()
