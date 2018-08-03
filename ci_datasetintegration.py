@@ -32,7 +32,7 @@ print(strftime("Execution start time: %Y-%m-%d %H:%M:%S +0000", gmtime(log_start
 taiga_api = TaigaAPI(token=TAIGA_token)
 taiga_project = taiga_api.projects.get_by_slug('widmont-hotmaps')
 logging.basicConfig(level=logging.INFO)
-taiga_api = None
+
 # schemas
 stat_schema = 'stat'  # 'stat' on production/dev database
 geo_schema = 'geo'  # 'geo' on production/dev database
@@ -109,7 +109,8 @@ def get_property_datapackage(obj, property_name, repo_name, resource_name):
 
 def parse_date(str):
     for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S',
-                   '%Y/%m/%d %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M'):
+                   '%Y/%m/%d %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M',
+                   '%Y/%m/%d', '%Y-%m-%d', '%d/%m/%Y'):
         try:
             return datetime.strptime(str, format)
         except:
@@ -117,7 +118,8 @@ def parse_date(str):
     raise ValueError('date format not supported! excpecting: ',
                      '%Y/%m/%d %H:%M:%S', ' or ', '%Y-%m-%d %H:%M:%S', ' or ',
                      '%d/%m/%Y %H:%M:%S', ' or ', '%Y/%m/%d %H:%M', ' or ',
-                     '%Y-%m-%d %H:%M', ' or ', '%d/%m/%Y %H:%M')
+                     '%Y-%m-%d %H:%M', ' or ', '%d/%m/%Y %H:%M', ' or ',
+                     '%Y/%m/%d', ' or ', '%Y-%m-%d', ' or ', '%d/%m/%Y')
 
 def get_or_create_time_id(timestamp, granularity):
     t = timestamp
@@ -370,11 +372,14 @@ for repository_name in listOfRepositories:
     error_messages = []
 
     # open file
+    # check if file construction is valid
     try:
-        dp = json.load(open(dp_file_path))
-    except:
-        print('can\'t open file datapackage.json')
-        dp = {}
+        with open(dp_file_path) as f:
+            dp = json.load(f)
+    except json.decoder.JSONDecodeError as e:
+        print('JSON decoding raised an exception.\n' + str(e))
+        continue
+
     # profile
     try:
         dp_profile = dp['profile']
@@ -570,6 +575,8 @@ for repository_name in listOfRepositories:
                         col_type = 'varchar(255)'
                     elif col_type == 'integer':
                         col_type = 'bigint'
+                    elif col_type == 'double':
+                        col_type = 'numeric(20,2)'
                     elif col_type == 'float':
                         col_type = 'numeric(20,2)'
                     elif col_type == 'boolean':
@@ -1203,10 +1210,11 @@ for repository_name in listOfRepositories:
                             fk_time_id = get_or_create_time_id(timestamp=att, granularity=temporal_resolution)
                             print('fk_time_id=', fk_time_id)
                         elif name == 'timestamp':
+                            name = 'timestamp'
                             timestamp = datetime.fromtimestamp(att).strftime('%Y/%m/%d %H:%M:%S')
-                            fk_time_id = db.query(commit=True,
-                                                  query="SELECT id FROM stat.time WHERE timestamp = '" + timestamp + "' AND granularity LIKE '" + temporal_resolution + "'")
+                            fk_time_id = get_or_create_time_id(timestamp=timestamp, granularity=temporal_resolution)
                             print('fk_time_id=', fk_time_id)
+
 
                         if att == '':
                             att = None
