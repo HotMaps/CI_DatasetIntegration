@@ -1288,7 +1288,7 @@ for repository_name in listOfRepositories:
                 split_spatial_tbl = spatial_table.split('.')
                 results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
                 vect_col_names = [e[0] for e in results]
-                view_col_names = [stat_schema+'.'+e for e in db_attributes_names if e.lower() not in vect_col_names]
+                view_col_names = [table_name+'.'+e for e in db_attributes_names if e.lower() not in vect_col_names]
                 print(vect_col_names, view_col_names)
                 query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
                         'AS SELECT ' + ', '.join(view_col_names) + time_cols + geom_cols + ' ' + \
