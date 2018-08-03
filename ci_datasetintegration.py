@@ -1007,6 +1007,8 @@ for repository_name in listOfRepositories:
                         col_type = 'bigint'
                     elif col_type == 'number':
                         col_type = 'numeric(20,2)'
+                    elif col_type == 'double':
+                        col_type = 'numeric(20,2)'
                     elif col_type == 'float':
                         col_type = 'numeric(20,2)'
                     elif col_type == 'boolean':
