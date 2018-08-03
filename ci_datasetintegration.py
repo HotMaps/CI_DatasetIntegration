@@ -528,6 +528,7 @@ for repository_name in listOfRepositories:
             tags = (c.title for c in contributors)
         except:
             tags = None
+        print('tags: ' + tags)
 
         post_issue(name='Validation error ' + repository_name,
                    description='The repository validation was not successful.\n' + str_error_messages,
@@ -1287,7 +1288,7 @@ for repository_name in listOfRepositories:
                 split_spatial_tbl = spatial_table.split('.')
                 results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
                 vect_col_names = [e[0] for e in results]
-                view_col_names = [e for e in db_attributes_names if e.lower() not in vect_col_names]
+                view_col_names = ['"'+e+'"' for e in db_attributes_names if e.lower() not in vect_col_names]
                 print(vect_col_names, view_col_names)
                 query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
                         'AS SELECT ' + ', '.join(view_col_names) + time_cols + geom_cols + ' ' + \
