@@ -552,6 +552,7 @@ for repository_name in listOfRepositories:
                    description='The repository validation was not successful.\n' + str_error_messages,
                    issue_type='Dataset Provider improvement needed',
                    tags=tags)
+        continue
     else:
         print('Validation OK')
 
