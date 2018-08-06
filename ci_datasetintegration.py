@@ -12,7 +12,7 @@ import logging
 import subprocess
 import csv
 from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, \
-    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port, TAIGA_token, GIT_token
+    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port, TAIGA_token, GIT_token, SERVER
 from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
@@ -87,6 +87,7 @@ def log_print_step(text):
     log_previous_time = log_end_time
 
 def post_issue(name, description, issue_type='Dataset integration', tags=[]):
+    tags.append(SERVER)
     issue = taiga_project.add_issue(
         name,
         taiga_project.priorities.get(name='Workaround possible - Low').id,
@@ -407,7 +408,12 @@ for repository_name in listOfRepositories:
                 for p in props:
                     try:
                         a = dp_r[p]
-                    except:
+                        if p == 'name':
+                            if len(a) > 50:
+                                error_messages.append('resource/name length is too long (max 50 char.)')
+                            if a.endswith(('.csv', '.tif', '.tiff', '.shp', '.geojson', '.txt')):
+                                error_messages.append('resource/name should not contain a file extension (extension is in resource/path)')
+                    except KeyError as e:
                         missing_properties.append('resources/' + p)
                 try:
                     dp_path = dp_r['path']
@@ -459,7 +465,12 @@ for repository_name in listOfRepositories:
                 for p in props:
                     try:
                         a = dp_r[p]
-                    except:
+                        if p == 'name':
+                            if len(a) > 50:
+                                error_messages.append('resource/name length is too long (max 50 char.)')
+                            if a.endswith(('.csv', '.tif', '.tiff', '.shp', '.geojson', '.txt')):
+                                error_messages.append('resource/name should not contain a file extension (extension is in resource/path)')
+                    except KeyError as e:
                         missing_properties.append('resources/' + p)
                 try:
                     dp_path = dp_r['path']
@@ -479,7 +490,12 @@ for repository_name in listOfRepositories:
                 for p in props:
                     try:
                         a = dp_r[p]
-                    except:
+                        if p == 'name':
+                            if len(a) > 50:
+                                error_messages.append('resource/name length is too long (max 50 char.)')
+                            if a.endswith(('.csv', '.tif', '.tiff', '.shp', '.geojson', '.txt')):
+                                error_messages.append('resource/name should not contain a file extension (extension is in resource/path)')
+                    except KeyError as e:
                         missing_properties.append('resources/' + p)
                 # fields
                 has_geom = False
@@ -525,16 +541,17 @@ for repository_name in listOfRepositories:
         # create tags from contributors (data providers)
         try:
             contributors = dp['contributors']
-            tags = (c.title for c in contributors)
-        except:
-            tags = None
-        print('tags: ' + tags)
+            tags = []
+            for c in contributors:
+                print(c['title'])
+                tags.append(c['title'])
+        except KeyError as e:
+            pass
 
         post_issue(name='Validation error ' + repository_name,
                    description='The repository validation was not successful.\n' + str_error_messages,
                    issue_type='Dataset Provider improvement needed',
                    tags=tags)
-        continue
     else:
         print('Validation OK')
 

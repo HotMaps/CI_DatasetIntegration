@@ -11,6 +11,8 @@ DB_password = 'password'
 
 # Git repositories
 GIT_base_path = '/path/to/my/repos'
+GIT_token = 'f-JzjmRRnxzwqC5o3zsQ'
+
 
 # Geoserver layers
 GEO_base_path = '/path/to/my/layers'
@@ -19,3 +21,9 @@ GEO_port = '8080'
 GEO_number_of_pyarmid_levels = 4
 GEO_user = 'admin'
 GEO_password = 'geoserver'
+
+# Taiga API
+TAIGA_token = 'TOKEN_str'
+
+# Config
+SERVER='DEV'
