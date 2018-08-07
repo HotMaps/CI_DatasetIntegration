@@ -1,5 +1,6 @@
 # python 3.5
 import sys
+import re
 import json
 from pprint import pprint
 import os.path
@@ -592,7 +593,7 @@ for repository_name in listOfRepositories:
         gis_data_type = dp['profile']
         gis_resources = dp['resources']
         dataset_version = dp['version']
-        table_name = dp['name'].lower().replace("hotmaps", "").replace('[^A-Za-z0-9]+', '_')
+        table_name = re.sub('[^A-Za-z0-9]+', '_', dp['name'].lower().replace("hotmaps", ""))
 
         print(dp)
         print(table_name)
@@ -603,7 +604,7 @@ for repository_name in listOfRepositories:
             name = r['name']
             path = r['path']
             # date = r['date']
-            raster_table_name = name.lower().replace("hotmaps", "").replace('[^A-Za-z0-9]+', '_')
+            raster_table_name = re.sub('[^A-Za-z0-9]+', '_', name.lower().replace("hotmaps", ""))
             precomputed_table_name_lau = raster_table_name + "_" + lau_table_name
             precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name
 
@@ -1099,7 +1100,7 @@ for repository_name in listOfRepositories:
 
                     col_name = att['name']
                     attributes_names.append(col_name)
-                    col_name = col_name.replace('[^A-Za-z0-9]+', '_')
+                    col_name = re.sub('[^A-Za-z0-9]+', '_', col_name)
                     db_attributes_names.append(col_name)
                     attributes_types.append(col_type)
                     attributes_units.append(att['unit'])
