@@ -1119,22 +1119,23 @@ for repository_name in listOfRepositories:
                     #     reader = csv.reader(f)
                     #     column_names = next(reader)
 
-                if missing_geometry:
-                    print('No spatial reference or geometry provided. The dataset must contain at least one geolocalized data.')
+                if missing_geometry is True:
+                    print('No spatial reference or geometry provided. The dataset should contain at least one geolocalized data. The dataset will be integrated as is but make sure that no geometry is needed.')
                     post_issue(name='Integration of resource failed - repository ' + repository_name,
-                               description='No spatial reference or geometry provided for resource "' + name + '". The resource has been skipped.'
+                               description='No spatial reference or geometry provided for resource "' + name + '". The resource has been skipped. '
                                          + 'The dataset must contain at least one geolocalized data (geometry or reference to spatial resolutions (NUTS/LAU)). '
-                                         + 'Make sure that the geometry column is of type "geometry" or that "spatial_resolution" and "spatial_key_field" attributes are correctly declared in the "datapackage.json" file')
-                    continue
-
-                if spatial_resolution and spatial_resolution.lower().startswith("nuts"):
-                    spatial_table_name = nuts_table_name
-                    spatial_table = nuts_table
-                    spatial_type = 'N'
-                elif spatial_resolution and spatial_resolution.lower().startswith("lau"):
-                    spatial_table_name = lau_table_name
-                    spatial_table = lau_table
-                    spatial_type = 'L'
+                                         + 'Make sure that the geometry column is of type "geometry" or that "spatial_resolution" and "spatial_key_field" attributes are correctly declared in the "datapackage.json" file. '
+                                         + 'The dataset will be integrated as is but if you get this error and your dataset should contain a geometry, please make sure it is declared correctly. Otherwise you might delete this issue.')
+                    # contine # turned off to allow the integration of datasets without geometry. uncomment to restrict
+                else:
+                    if spatial_resolution and spatial_resolution.lower().startswith("nuts"):
+                        spatial_table_name = nuts_table_name
+                        spatial_table = nuts_table
+                        spatial_type = 'N'
+                    elif spatial_resolution and spatial_resolution.lower().startswith("lau"):
+                        spatial_table_name = lau_table_name
+                        spatial_table = lau_table
+                        spatial_type = 'L'
 
                 # temporal resolution
                 temporal_resolution = ''
@@ -1222,22 +1223,23 @@ for repository_name in listOfRepositories:
                                 pass
 
                         # handle spatial column
-                        if name == spatial_field_name:
-                            # nuts
-                            if spatial_type == 'N':  # NUTS
-                                fk_gid = db.query(commit=True,
-                                                  query="SELECT gid FROM " + spatial_table + " WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
-                            elif spatial_type == 'L':  # LAU
-                                fk_gid = db.query(commit=True,
-                                                  query="SELECT gid FROM " + spatial_table + " WHERE comm_id LIKE '" + att + "'")
+                        if missing_geometry is False:
+                            if name == spatial_field_name:
+                                # nuts
+                                if spatial_type == 'N':  # NUTS
+                                    fk_gid = db.query(commit=True,
+                                                      query="SELECT gid FROM " + spatial_table + " WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
+                                elif spatial_type == 'L':  # LAU
+                                    fk_gid = db.query(commit=True,
+                                                      query="SELECT gid FROM " + spatial_table + " WHERE comm_id LIKE '" + att + "'")
 
-                            if fk_gid is not None and len(fk_gid) > 0 and len(fk_gid[0]) > 0:
-                                fk_gid = fk_gid[0][0]
-                            else:
-                                print("No geometry found for reference: " + att + ". Skipping.")
-                                skip = True
+                                if fk_gid is not None and len(fk_gid) > 0 and len(fk_gid[0]) > 0:
+                                    fk_gid = fk_gid[0][0]
+                                else:
+                                    print("No geometry found for reference: " + att + ". Skipping.")
+                                    skip = True
 
-                            print('fk_gid=', fk_gid)
+                                print('fk_gid=', fk_gid)
 
                         # handle temporal column
                         fk_time_id = None
@@ -1284,77 +1286,78 @@ for repository_name in listOfRepositories:
                     #        [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
                     #    map(str_with_single_quotes, values)) + ')')
 
-                # create view for Geoserver (if contains geometries / or refs to existing geometries)
-                log_print_step("Create view for Geoserver")
-                if fk_time_id:
-                    time_cols = ', ' + time_table_name + '.timestamp'
-                    time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
-                                'ON (' + table_name + '.fk_time_id = ' + time_table_name + '.id)'
-                else:
-                    time_cols = ''
-                    time_join = ''
+                if missing_geometry is False:
+                    # create view for Geoserver (if contains geometries / or refs to existing geometries)
+                    log_print_step("Create view for Geoserver")
+                    if fk_time_id:
+                        time_cols = ', ' + time_table_name + '.timestamp'
+                        time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
+                                    'ON (' + table_name + '.fk_time_id = ' + time_table_name + '.id)'
+                    else:
+                        time_cols = ''
+                        time_join = ''
 
-                if fk_gid:
-                    geom_cols = ', ' + spatial_table_name + '.*'
-                    geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
-                                'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
-                else:
-                    geom_cols = ''
-                    geom_join = ''
+                    if fk_gid:
+                        geom_cols = ', ' + spatial_table_name + '.*'
+                        geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
+                                    'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
+                    else:
+                        geom_cols = ''
+                        geom_join = ''
 
-				# filter column names already present in spatial table
-                split_spatial_tbl = spatial_table.split('.')
-                results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
-                vect_col_names = [e[0] for e in results]
-                view_col_names = [table_name+'.'+e for e in db_attributes_names if e.lower() not in vect_col_names]
-                print(vect_col_names, view_col_names)
-                query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
-                        'AS SELECT ' + ', '.join(view_col_names) + time_cols + geom_cols + ' ' + \
-                        'FROM ' + stat_schema + '.' + table_name + \
-                        time_join + geom_join + \
-                        ';'
+    				# filter column names already present in spatial table
+                    split_spatial_tbl = spatial_table.split('.')
+                    results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
+                    vect_col_names = [e[0] for e in results]
+                    view_col_names = [table_name+'.'+e for e in db_attributes_names if e.lower() not in vect_col_names]
+                    print(vect_col_names, view_col_names)
+                    query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
+                            'AS SELECT ' + ', '.join(view_col_names) + time_cols + geom_cols + ' ' + \
+                            'FROM ' + stat_schema + '.' + table_name + \
+                            time_join + geom_join + \
+                            ';'
 
-                # add to database
-                db.query(commit=True, query=query)
+                    # add to database
+                    db.query(commit=True, query=query)
 
-                # add to geoserver
-                log_print_step("Add to Geoserver")
-                workspace = 'hotmaps'
-                store = 'hotmapsdb'
-                layer_name = table_name + '_view'
+                    # add to geoserver
+                    log_print_step("Add to Geoserver")
+                    workspace = 'hotmaps'
+                    store = 'hotmapsdb'
+                    layer_name = table_name + '_view'
 
-                # remove previous layer from geoserver
-                # remove layer
-                response = requests.delete(
-                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
-                    auth=(GEO_user, GEO_password),
-                )
-                print(response, response.content)
+                    # remove previous layer from geoserver
+                    # remove layer
+                    response = requests.delete(
+                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                        auth=(GEO_user, GEO_password),
+                    )
+                    print(response, response.content)
 
-                # remove feature type
-                response = requests.delete(
-                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
-                    auth=(GEO_user, GEO_password),
-                )
-                print(response, response.content)
+                    # remove feature type
+                    response = requests.delete(
+                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                        auth=(GEO_user, GEO_password),
+                    )
+                    print(response, response.content)
 
-                # create layer
-                headers = {
-                    'Content-type': 'text/xml',
-                }
-                data = '<featureType>' \
-                       + '<name>' + layer_name + '</name>' \
-                       + '<title>' + layer_name + '</title>' \
-                       + '</featureType>'
+                    # create layer
+                    headers = {
+                        'Content-type': 'text/xml',
+                    }
+                    data = '<featureType>' \
+                           + '<name>' + layer_name + '</name>' \
+                           + '<title>' + layer_name + '</title>' \
+                           + '</featureType>'
 
-                response = requests.post(
-                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
-                    headers=headers,
-                    data=data,
-                    auth=(GEO_user, GEO_password),
-                )
-                print(data)
-                print(response, response.content)
+                    response = requests.post(
+                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                        headers=headers,
+                        data=data,
+                        auth=(GEO_user, GEO_password),
+                    )
+                    print(data)
+                    print(response, response.content)
 
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
