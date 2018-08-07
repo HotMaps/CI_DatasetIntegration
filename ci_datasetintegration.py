@@ -1170,7 +1170,7 @@ for repository_name in listOfRepositories:
                     temporal_resolution = 'week'
 
                 constraints = ""
-                if spatial_table is not None:
+                if spatial_table is not None and missing_geometry is False:
                     # add spatial relationship in table
                     constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
                                   + "SELECT 1 FROM pg_constraint WHERE conname = \'" + table_name + "_" + spatial_table_name + "_gid_fkey\') THEN " \
@@ -1183,7 +1183,6 @@ for repository_name in listOfRepositories:
 
                     db_attributes_names.append('fk_' + spatial_table_name + '_gid')
                     db_attributes_types.append('bigint')
-
 
                 if temporal_resolution is not None and len(temporal_resolution) > 0:
                     # add temporal relationship in table
