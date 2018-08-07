@@ -1068,6 +1068,7 @@ for repository_name in listOfRepositories:
                     col_type = att['type']
                     if col_type == 'string':
                         col_type = 'varchar(255)'
+                        att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'integer':
                         col_type = 'bigint'
                     elif col_type == 'number':
@@ -1078,15 +1079,20 @@ for repository_name in listOfRepositories:
                         col_type = 'numeric(20,2)'
                     elif col_type == 'boolean':
                         col_type = 'boolean'
+                        att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'date':
                         col_type = 'date'
+                        att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'datetime':
                         col_type = 'timestamp'
+                        att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'timestamp':
                         col_type = 'timestamp'
+                        att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'geom' or col_type == 'geometry':
                         col_type = 'geometry'
                         count_geom_cols = count_geom_cols + 1
+                        att['unit'] = '' # prevent error if user set unit on geometry reference column
                     else:
                         print('Unhandled table type ', col_type)
                         break
