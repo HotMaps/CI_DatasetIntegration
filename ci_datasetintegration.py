@@ -350,6 +350,11 @@ for repository_name in listOfRepositories:
     repo_path = os.path.join(repositories_base_path, repository_name)
     if not os.path.isdir(repo_path):
         print('repo_path is not a directory')
+        msg = 'repository path is not a directory'
+        post_issue(name='Validation error ' + repository_name,
+                   description='The repository validation was not successful.\n' + msg,
+                   issue_type='Dataset Provider improvement needed')
+        continue
 
     content = os.listdir('.')
 
@@ -357,11 +362,21 @@ for repository_name in listOfRepositories:
     dp_file_path = os.path.join(repo_path, 'datapackage.json')
     if not os.path.isfile(dp_file_path):
         print('datapackage.json file missing or not in correct directory')
+        msg = 'datapackage.json file missing or not in correct directory'
+        post_issue(name='Validation error ' + repository_name,
+                   description='The repository validation was not successful.\n' + msg,
+                   issue_type='Dataset Provider improvement needed')
+        continue
 
     # check that data directory is present
     data_dir_path = os.path.join(repo_path, 'data')
     if not os.path.isdir(data_dir_path):
         print('data directory missing')
+        msg = 'data directory missing'
+        post_issue(name='Validation error ' + repository_name,
+                   description='The repository validation was not successful.\n' + msg,
+                   issue_type='Dataset Provider improvement needed')
+        continue
 
     # check datapackage file
     #is_valid = validate_datapackage.validate_datapackage(dp_file_path)
