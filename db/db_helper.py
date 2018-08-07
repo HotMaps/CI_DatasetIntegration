@@ -71,7 +71,7 @@ class DB(object):
 
         except psycopg2.Error as e:
             print(e)
-            self.close_connection()
+            #self.close_connection()
             raise
 
     def insert(self, table, columns, types, values, commit=False, notices=False):
