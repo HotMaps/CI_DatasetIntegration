@@ -113,7 +113,9 @@ def get_property_datapackage(obj, property_name, repo_name, resource_name):
 def parse_date(str):
     for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S',
                    '%Y/%m/%d %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M',
-                   '%Y/%m/%d', '%Y-%m-%d', '%d/%m/%Y'):
+                   '%Y/%m/%d', '%Y-%m-%d', '%d/%m/%Y',
+                   '%Y/%m', '%Y-%m', '%m/%Y',
+                   '%Y'):
         try:
             return datetime.strptime(str, format)
         except:
