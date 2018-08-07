@@ -556,7 +556,11 @@ for repository_name in listOfRepositories:
                    description='The repository validation was not successful.\n' + str_error_messages,
                    issue_type='Dataset Provider improvement needed',
                    tags=tags)
-        continue
+
+        if len(error_messages) + len(missing_properties) == 1 and has_geom is False:
+            pass # allow datasets without geometry
+        else:
+            continue # otherwise skip dataset
     else:
         print('Validation OK')
 
