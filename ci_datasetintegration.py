@@ -524,7 +524,9 @@ for repository_name in listOfRepositories:
                         error_messages.append('spatial_key_field does not refer to an existing field name')
                 else:
                     if not has_geom:
-                        error_messages.append('no geometry provided (nuts/lau reference [attribute spatial_key_field and spatial_resolution] or geometry field)')
+                        error_messages.append('no geometry provided (nuts/lau reference [attribute spatial_key_field and spatial_resolution] or geometry field)\n'
+                                              + '\tThe dataset will be integrated as is but make sure that no geometry is needed.')
+
         else:
             err_msg = '\'profile\' contains an unsupported value! Use only vector-data-resource, raster-data-resource or tabular-data-resource'
             print(err_msg)
@@ -1123,11 +1125,11 @@ for repository_name in listOfRepositories:
 
                 if missing_geometry is True:
                     print('No spatial reference or geometry provided. The dataset should contain at least one geolocalized data. The dataset will be integrated as is but make sure that no geometry is needed.')
-                    post_issue(name='Integration of resource failed - repository ' + repository_name,
-                               description='No spatial reference or geometry provided for resource "' + name + '". The resource has been skipped. '
-                                         + 'The dataset must contain at least one geolocalized data (geometry or reference to spatial resolutions (NUTS/LAU)). '
-                                         + 'Make sure that the geometry column is of type "geometry" or that "spatial_resolution" and "spatial_key_field" attributes are correctly declared in the "datapackage.json" file. '
-                                         + 'The dataset will be integrated as is but if you get this error and your dataset should contain a geometry, please make sure it is declared correctly. Otherwise you might delete this issue.')
+                    # post_issue(name='Integration of resource failed - repository ' + repository_name,
+                    #            description='No spatial reference or geometry provided for resource "' + name + '". The resource has been skipped. '
+                    #                      + 'The dataset must contain at least one geolocalized data (geometry or reference to spatial resolutions (NUTS/LAU)). '
+                    #                      + 'Make sure that the geometry column is of type "geometry" or that "spatial_resolution" and "spatial_key_field" attributes are correctly declared in the "datapackage.json" file. '
+                    #                      + 'The dataset will be integrated as is but if you get this error and your dataset should contain a geometry, please make sure it is declared correctly. Otherwise you might delete this issue.')
                     # contine # turned off to allow the integration of datasets without geometry. uncomment to restrict
                 else:
                     if spatial_resolution and spatial_resolution.lower().startswith("nuts"):
