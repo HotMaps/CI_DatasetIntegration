@@ -1191,7 +1191,7 @@ for repository_name in listOfRepositories:
                                   + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
                                   + "ADD CONSTRAINT " + table_name + "_" + time_table_name + "_id_fkey " \
                                   + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
-                                  + "REFERENCES " + spatial_table + "(id) " \
+                                  + "REFERENCES " + time_table + "(id) " \
                                   + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
                                   + "END IF; END; $$; "
 
