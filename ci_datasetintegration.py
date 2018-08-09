@@ -13,7 +13,7 @@ import logging
 import subprocess
 import csv
 from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, \
-    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port, TAIGA_token, GIT_token, SERVER
+    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port, TAIGA_token, GIT_token, SERVER, DEBUG
 from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
@@ -88,6 +88,9 @@ def log_print_step(text):
     log_previous_time = log_end_time
 
 def post_issue(name, description, issue_type='Dataset integration', tags=[]):
+    if DEBUG:
+        print(name, description, issue_type, tags.append(SERVER))
+        return
     tags.append(SERVER)
     issue = taiga_project.add_issue(
         name,
@@ -292,7 +295,6 @@ log_print_step("Clone/Update repositories")
 for subgroup in subgroups:
     hotmapsGroups.append(gl.groups.get(subgroup.id, lazy=True))
 
-
 for group in hotmapsGroups:
     projects = group.projects.list(all=True)
     print(projects)
@@ -404,6 +406,17 @@ for repository_name in listOfRepositories:
                    description='The repository validation was not successful.\n' + msg,
                    issue_type='Dataset Provider improvement needed')
         continue
+
+    # create tags from contributors (data providers)
+    try:
+        contributors = dp['contributors']
+        tags = []
+        for c in contributors:
+            print(c['title'])
+            tags.append(c['title'])
+    except KeyError as e:
+        pass
+
 
     # profile
     try:
@@ -558,16 +571,6 @@ for repository_name in listOfRepositories:
             str_error_messages = 'Missing properties: \n' + '\n'.join(missing_properties)
         print('Validation error for repository ' + repository_name + '\n' + str_error_messages)
 
-        # create tags from contributors (data providers)
-        try:
-            contributors = dp['contributors']
-            tags = []
-            for c in contributors:
-                print(c['title'])
-                tags.append(c['title'])
-        except KeyError as e:
-            pass
-
         post_issue(name='Validation error ' + repository_name,
                    description='The repository validation was not successful.\n' + str_error_messages,
                    issue_type='Dataset Provider improvement needed',
@@ -575,7 +578,9 @@ for repository_name in listOfRepositories:
 
         if len(error_messages) + len(missing_properties) == 1 and has_geom is False:
             pass # allow datasets without geometry
+            print('Resource integration continuing despite geom error.')
         else:
+            print('Resource integration aborted.')
             continue # otherwise skip dataset
     else:
         print('Validation OK')
@@ -1021,6 +1026,7 @@ for repository_name in listOfRepositories:
 
             elif gis_data_type == 'tabular-data-resource':
                 log_print_step("Read datapackage for CSV")
+
                 schema = r['schema']
 
                 # retrieve start and end date
@@ -1066,7 +1072,7 @@ for repository_name in listOfRepositories:
                 count_geom_cols = 0
 
                 for att in fields:
-                    col_type = att['type']
+                    col_type = att['type'].lower()
                     if col_type == 'string':
                         col_type = 'varchar(255)'
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
@@ -1082,13 +1088,13 @@ for repository_name in listOfRepositories:
                         col_type = 'boolean'
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'date':
-                        col_type = 'date'
+                        col_type = 'varchar(255)'
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'datetime':
-                        col_type = 'timestamp'
+                        col_type = 'varchar(255)'
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'timestamp':
-                        col_type = 'timestamp'
+                        col_type = 'varchar(255)'
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'geom' or col_type == 'geometry':
                         col_type = 'geometry'
@@ -1098,9 +1104,10 @@ for repository_name in listOfRepositories:
                         print('Unhandled table type ', col_type)
                         break
 
-                    col_name = att['name']
-                    attributes_names.append(col_name)
-                    col_name = re.sub('[^A-Za-z0-9]+', '_', col_name)
+                    col_name = re.sub('[^A-Za-z0-9]+', '_', att['name'].lower()) # prevent unwanted chars
+                    while col_name in attributes_names: # append '_1' if duplicate
+                        col_name = col_name + '_1'
+                    attributes_names.append(att['name'])
                     db_attributes_names.append(col_name)
                     attributes_types.append(col_type)
                     attributes_units.append(att['unit'])
@@ -1156,7 +1163,7 @@ for repository_name in listOfRepositories:
                     #                      + 'The dataset must contain at least one geolocalized data (geometry or reference to spatial resolutions (NUTS/LAU)). '
                     #                      + 'Make sure that the geometry column is of type "geometry" or that "spatial_resolution" and "spatial_key_field" attributes are correctly declared in the "datapackage.json" file. '
                     #                      + 'The dataset will be integrated as is but if you get this error and your dataset should contain a geometry, please make sure it is declared correctly. Otherwise you might delete this issue.')
-                    # contine # turned off to allow the integration of datasets without geometry. uncomment to restrict
+                    # continue # turned off to allow the integration of datasets without geometry. uncomment to restrict
                 else:
                     if spatial_resolution and spatial_resolution.lower().startswith("nuts"):
                         spatial_table_name = nuts_table_name
@@ -1242,6 +1249,9 @@ for repository_name in listOfRepositories:
                             att = row[name]
                         except:
                             print(name, ' attribute does not match a column name ', row)
+                            post_issue(name='Integration failed - repository ' + repository_name,
+                                       description=name + ' attribute does not match a column name ' + row + '\n' + traceback.format_exc(),
+                                       issue_type='Data Provider improvement needed', tags=tags)
                             continue
 
                         # check type
