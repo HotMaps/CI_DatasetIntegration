@@ -344,6 +344,8 @@ except:
     pass
 
 for repository_name in listOfRepositories:
+    if repository_name == 'HotmapsLAU' or repository_name == 'lau2' or repository_name == 'NUTS':
+        continue
     """
         VALIDATION
     """
