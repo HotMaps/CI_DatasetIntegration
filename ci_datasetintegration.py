@@ -115,20 +115,22 @@ def get_property_datapackage(obj, property_name, repo_name, resource_name):
                    issue_type='Dataset Provider improvement needed')
 
 def parse_date(str):
-    for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S',
-                   '%Y/%m/%d %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M',
-                   '%Y/%m/%d', '%Y-%m-%d', '%d/%m/%Y',
-                   '%Y/%m', '%Y-%m', '%m/%Y',
+    for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S', '%d.%m.%Y %H:%M:%S',
+                   '%Y/%m/%d %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M', '%d.%m.%Y %H:%M',
+                   '%Y/%m/%d', '%Y-%m-%d', '%d/%m/%Y', '%d.%m.%Y',
+                   '%Y/%m', '%Y-%m', '%m/%Y', '%m.%Y',
                    '%Y'):
         try:
             return datetime.strptime(str, format)
         except:
             pass
     raise ValueError('date format not supported! excpecting: ',
-                     '%Y/%m/%d %H:%M:%S', ' or ', '%Y-%m-%d %H:%M:%S', ' or ',
-                     '%d/%m/%Y %H:%M:%S', ' or ', '%Y/%m/%d %H:%M', ' or ',
+                     '%Y/%m/%d %H:%M:%S', ' or ', '%Y-%m-%d %H:%M:%S', ' or ', '%d.%m.%Y %H:%M:%S', ' or ',
+                     '%d/%m/%Y %H:%M:%S', ' or ', '%Y/%m/%d %H:%M', ' or ', '%d.%m.%Y %H:%M', ' or ',
                      '%Y-%m-%d %H:%M', ' or ', '%d/%m/%Y %H:%M', ' or ',
-                     '%Y/%m/%d', ' or ', '%Y-%m-%d', ' or ', '%d/%m/%Y')
+                     '%Y/%m/%d', ' or ', '%Y-%m-%d', ' or ', '%d/%m/%Y', '%d.%m.%Y', ' or ',
+                     '%Y/%m', ' or ', '%Y-%m', ' or ', '%m/%Y', ' or ', '%m.%Y', ' or ',
+                     '%Y')
 
 def get_or_create_time_id(timestamp, granularity):
     t = timestamp
@@ -563,7 +565,9 @@ for repository_name in listOfRepositories:
             print(err_msg)
             error_messages.append(err_msg)
 
-    if len(error_messages) + len(missing_properties) > 0:
+    number_of_errors = len(error_messages) + len(missing_properties)
+    print("number of errors found: ", number_of_errors)
+    if number_of_errors > 0:
         str_error_messages = ''
         if len(error_messages) > 0:
             str_error_messages = 'Errors: \n' + '\n'.join(error_messages)
@@ -578,7 +582,7 @@ for repository_name in listOfRepositories:
                    issue_type='Dataset Provider improvement needed',
                    tags=tags)
 
-        if len(error_messages) + len(missing_properties) == 1 and has_geom is False:
+        if number_of_errors == 1 and has_geom is False:
             pass # allow datasets without geometry
             print('Resource integration continuing despite geom error.')
         else:
