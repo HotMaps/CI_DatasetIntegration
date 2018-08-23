@@ -27,6 +27,10 @@ from taiga.exceptions import TaigaException
 
 
 manual_repo_list = ['scen_all_scenarios_electr_district_heat_CO2', 'scen_all_scenarios_electr_district_heat_efficiency_total']
+manual_repo_id_list = {}[7812843, 7813021]
+manual_repo_id_list['scen_all_scenarios_electr_district_heat_CO2'] = 7812843
+manual_repo_id_list['scen_all_scenarios_electr_district_heat_efficiency_total'] = 7813021
+
 
 log_start_time = time()
 log_previous_time = log_start_time
@@ -321,6 +325,7 @@ for group in hotmapsGroups:
 
 
 listOfRepositories = manual_repo_list
+listOfRepoIds = manual_repo_id_list
 
 try:
     listOfRepositories.remove('HotmapsLAU')
