@@ -607,15 +607,17 @@ for repository_name in listOfRepositories:
         table_name = re.sub('[^A-Za-z0-9]+', '_', dp['name'].lower().replace("hotmaps", ""))
 
         print(dp)
-        print(table_name)
 
         for r in gis_resources:
             log_print_step("Start resource")
             format = r['format']
             name = r['name']
             path = r['path']
+            table_name = re.sub('[^A-Za-z0-9]+', '_', name.lower().replace("hotmaps", ""))
+            print('table_name =', table_name)
+
             # date = r['date']
-            raster_table_name = re.sub('[^A-Za-z0-9]+', '_', name.lower().replace("hotmaps", ""))
+            raster_table_name = table_name
             precomputed_table_name_lau = raster_table_name + "_" + lau_table_name
             precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name
 
