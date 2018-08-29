@@ -435,6 +435,8 @@ for repository_name in listOfRepositories:
         dp_resources = None
 
     # check resources attributes
+    has_geom = None # variable used to detect geometries in datapacakge
+    
     if dp_resources:
         if dp_profile == 'vector-data-resource':
             for dp_r in dp_resources:
@@ -582,7 +584,7 @@ for repository_name in listOfRepositories:
                    issue_type='Dataset Provider improvement needed',
                    tags=tags)
 
-        if number_of_errors == 1 and has_geom is False:
+        if has_geom is not None and number_of_errors == 1 and has_geom is False:
             pass # allow datasets without geometry
             print('Resource integration continuing despite geom error.')
         else:
