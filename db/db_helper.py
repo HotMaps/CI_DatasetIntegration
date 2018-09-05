@@ -96,7 +96,7 @@ class DB(object):
                 query = query + "%s"
             elif types[i] == 'geometry':
                 query = query + "ST_GeomFromEWKT(%s)"
-        query = query + ') '
+        query = query + ') ;'
         return self.query(query=query, data=values, commit=commit, notices=notices)
 
     def drop_table(self, table_name, cascade=False, notices=False):
@@ -104,8 +104,10 @@ class DB(object):
             print('Droping table ', table_name)
             cursor = self.conn.cursor()
             query = 'DROP TABLE IF EXISTS ' + table_name
-            if cascade:
+            if cascade is True:
                 query = query + ' CASCADE'
+            query = query + ';'
+            print("executing Query: ", query)
             cursor.execute(query)
             if notices:
                 pprint(self.conn.notices)
@@ -125,7 +127,7 @@ class DB(object):
                     '(' + id_col_name + ' bigserial PRIMARY KEY, ' + \
                     ', '.join(' '.join(n) for n in zip(col_names, col_types)) + '); ' + \
                     constraints_str + '; '
-            print(query)
+            print("executing Query: ", query)
             cursor = self.conn.cursor()
             cursor.execute(query)
             if notices:

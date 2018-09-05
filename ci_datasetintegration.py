@@ -436,7 +436,7 @@ for repository_name in listOfRepositories:
 
     # check resources attributes
     has_geom = None # variable used to detect geometries in datapacakge
-    
+
     if dp_resources:
         if dp_profile == 'vector-data-resource':
             for dp_r in dp_resources:
@@ -834,7 +834,7 @@ for repository_name in listOfRepositories:
                 prec_tbl = stat_schema + '.' + precomputed_table_name_lau
                 prec_tbl_name = precomputed_table_name_lau
 
-                db.drop_table(table_name=prec_tbl, notices=verbose)
+                db.drop_table(table_name=prec_tbl, notices=verbose, cascade=True)
 
                 attributes_names = (
                     'count', 'sum', 'mean', 'stddev', 'min', 'max',
@@ -888,7 +888,7 @@ for repository_name in listOfRepositories:
                 vect_tbl_name = nuts_table_name
                 prec_tbl_name = precomputed_table_name_nuts
 
-                db.drop_table(table_name=prec_tbl, notices=verbose)
+                db.drop_table(table_name=prec_tbl, notices=verbose, cascade=True)
 
                 attributes_names = (
                     'min', 'max', 'sum', 'count',
@@ -1054,9 +1054,10 @@ for repository_name in listOfRepositories:
                 # file path
                 tabular_file_path = repository_path + '/' + path
 
-                # retrieve csv dialect
+                # retrieve csv dialect and encoding
                 delimiter = ','
                 double_quote = True
+                encoding = 'utf-8'
                 #lineterminator = '\r\n'
                 try:
                     dialect = r['dialect']
@@ -1071,6 +1072,10 @@ for repository_name in listOfRepositories:
                 except:
                     print('No doubleQuote provided for this dialect')
                 # lineterminator = dialect['lineterminator']
+                try:
+                    encoding = r['encoding']
+                except:
+                    print('No encoding provided for this resource')
 
                 fields = schema['fields']
 
@@ -1243,7 +1248,9 @@ for repository_name in listOfRepositories:
                                 col_types=db_attributes_types, id_col_name='id', constraints_str=constraints)
 
                 log_print_step("Integrate CSV in database")
-                file = open(tabular_file_path, "r", encoding='utf-8-sig')
+                if encoding == 'utf-8' or encoding == 'utf_8' or encoding == 'utf8' or encoding == 'u8':
+                    encoding = 'utf-8-sig'
+                file = open(tabular_file_path, "r", encoding=encoding)
                 csv.register_dialect('custom', delimiter=delimiter, doublequote=double_quote) # lineterminator=lineterminator
                 reader = csv.DictReader(f=file, dialect='custom')
 
@@ -1354,12 +1361,16 @@ for repository_name in listOfRepositories:
                         geom_cols = ''
                         geom_join = ''
 
-    				# filter column names already present in spatial table
-                    split_spatial_tbl = spatial_table.split('.')
-                    results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
-                    vect_col_names = [e[0] for e in results]
-                    view_col_names = [table_name+'.'+e for e in db_attributes_names if e.lower() not in vect_col_names]
-                    print(vect_col_names, view_col_names)
+                    # filter column names already present in spatial table
+                    if spatial_table is not None:
+                        split_spatial_tbl = spatial_table.split('.')
+                        results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
+                        vect_col_names = [e[0] for e in results]
+                        view_col_names = [table_name+'.'+e for e in db_attributes_names if e.lower() not in vect_col_names]
+                        print(vect_col_names, view_col_names)
+                    else:
+                        view_col_names = [table_name+'.'+e for e in db_attributes_names]
+
                     query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
                             'AS SELECT ' + ', '.join(view_col_names) + time_cols + geom_cols + ' ' + \
                             'FROM ' + stat_schema + '.' + table_name + \
