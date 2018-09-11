@@ -1284,10 +1284,10 @@ for repository_name in listOfRepositories:
                                 # nuts
                                 if spatial_type == 'N':  # NUTS
                                     fk_gid = db.query(commit=True,
-                                                      query="SELECT gid FROM " + spatial_table + " WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
+                                                      query="SELECT gid FROM " + spatial_table + " WHERE year = '2013-01-01' AND nuts_id LIKE '" + att.upper() + "'")
                                 elif spatial_type == 'L':  # LAU
                                     fk_gid = db.query(commit=True,
-                                                      query="SELECT gid FROM " + spatial_table + " WHERE comm_id LIKE '" + att + "'")
+                                                      query="SELECT gid FROM " + spatial_table + " WHERE comm_id LIKE '" + att.upper() + "'")
 
                                 if fk_gid is not None and len(fk_gid) > 0 and len(fk_gid[0]) > 0:
                                     fk_gid = fk_gid[0][0]
