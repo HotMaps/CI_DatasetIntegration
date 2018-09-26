@@ -1433,6 +1433,99 @@ for repository_name in listOfRepositories:
                     print(data)
                     print(response, response.content)
 
+                    # special case for industrial sites database
+                    print(repository_name, r['name'])
+                    name = r['name']
+                    if repository_name == 'industrial_sites_Industrial_Database' and name == 'Industrial_Database':
+                        print('Industrial_Database repository. Adding custom views (Database) and layers (Geoserver).')
+                        value_fields = {}
+                        value_fields['industrial_database_excess_heat'] = ['id', 'siteid', 'companyname', 'sitename', 'address', 'citycode', 'city', 'country', 'geom',
+                                                       'excess_heat_100-200c', 'excess_heat_200-500c', 'excess_heat_500c', 'excess_heat_total',
+                                                       'excess_heat_100-200c_unit', 'excess_heat_200-500c_unit', 'excess_heat_500c_unit', 'excess_heat_total_unit']
+                        value_fields['industrial_database_subsector'] = ['id', 'geom', 'subsector']
+                        value_fields['industrial_database_emissions'] = ['id', 'siteid', 'companyname', 'address', 'citycode', 'city', 'country', 'geom', 'subsector', 'datasource',
+                                                     'emissions_ets_2014', 'emissions_eprtr_2014', 'emissions_ets_2014_unit', 'emissions_eprtr_2014_unit']
+                        value_fields['industrial_database_copagnyname'] = ['id', 'companyname', 'geom']
+
+                        for table_name, view_col_names in value_fields.items():
+                            log_print_step("Create view for Geoserver")
+                            if fk_time_id:
+                                time_cols = ', ' + time_table_name + '.timestamp'
+                                time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
+                                            'ON (' + name + '.fk_time_id = ' + time_table_name + '.id)'
+                            else:
+                                time_cols = ''
+                                time_join = ''
+
+                            if fk_gid:
+                                geom_cols = ', ' + spatial_table_name + '.*'
+                                geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
+                                            'ON (' + name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
+                            else:
+                                geom_cols = ''
+                                geom_join = ''
+
+                            # filter column names already present in spatial table
+                            # if spatial_table is not None:
+                            #     split_spatial_tbl = spatial_table.split('.')
+                            #     results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
+                            #     vect_col_names = [e[0] for e in results]
+                            #     view_col_names = [table_name+'.'+e for e in db_attributes_names if e.lower() not in vect_col_names]
+                            #     print(vect_col_names, view_col_names)
+                            # else:
+                            #     view_col_names = [table_name+'.'+e for e in db_attributes_names]
+
+                            query = 'CREATE VIEW ' + geo_schema + '.' + table_name + ' ' + \
+                                    'AS SELECT ' + ', '.join(['industrial_database.' + c.replace('-', '_') for c in view_col_names]) + time_cols + geom_cols + ' ' + \
+                                    'FROM ' + stat_schema + '.' + name + \
+                                    time_join + geom_join + \
+                                    ';'
+
+                            # add to database
+                            db.query(commit=True, query=query)
+
+                            add_to_geoserver = False
+
+                            if add_to_geoserver:
+                                # add to geoserver
+                                log_print_step("Add to Geoserver")
+                                workspace = 'hotmaps'
+                                store = 'hotmapsdb'
+                                layer_name = table_name
+
+                                # remove previous layer from geoserver
+                                # remove layer
+                                response = requests.delete(
+                                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                                    auth=(GEO_user, GEO_password),
+                                )
+                                print(response, response.content)
+
+                                # remove feature type
+                                response = requests.delete(
+                                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                                    auth=(GEO_user, GEO_password),
+                                )
+                                print(response, response.content)
+
+                                # create layer
+                                headers = {
+                                    'Content-type': 'text/xml',
+                                }
+                                data = '<featureType>' \
+                                       + '<name>' + layer_name + '</name>' \
+                                       + '<title>' + layer_name + '</title>' \
+                                       + '</featureType>'
+
+                                response = requests.post(
+                                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                                    headers=headers,
+                                    data=data,
+                                    auth=(GEO_user, GEO_password),
+                                )
+                                print(data)
+                                print(response, response.content)
+
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
 
