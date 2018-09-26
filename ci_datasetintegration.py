@@ -1422,6 +1422,8 @@ for repository_name in listOfRepositories:
                     # special case for industrial sites database
                     print(repository_name, r['name'])
                     name = r['name']
+                    views_schema = 'public' # set to "public" to match the mess in DB (should be "geo" like every other geo-related tables)
+                    # views_schema = geo_schema
                     if repository_name == 'industrial_sites_Industrial_Database' and name == 'Industrial_Database':
                         print('Industrial_Database repository. Adding custom views (Database) and layers (Geoserver).')
                         value_fields = {}
@@ -1431,7 +1433,7 @@ for repository_name in listOfRepositories:
                         value_fields['industrial_database_subsector'] = ['id', 'geom', 'subsector']
                         value_fields['industrial_database_emissions'] = ['id', 'siteid', 'companyname', 'address', 'citycode', 'city', 'country', 'geom', 'subsector', 'datasource',
                                                      'emissions_ets_2014', 'emissions_eprtr_2014', 'emissions_ets_2014_unit', 'emissions_eprtr_2014_unit']
-                        value_fields['industrial_database_copagnyname'] = ['id', 'companyname', 'geom']
+                        value_fields['industrial_database_compagnyname'] = ['id', 'companyname', 'geom']
 
                         for table_name, view_col_names in value_fields.items():
                             log_print_step("Create view for Geoserver")
@@ -1461,7 +1463,7 @@ for repository_name in listOfRepositories:
                             # else:
                             #     view_col_names = [table_name+'.'+e for e in db_attributes_names]
 
-                            query = 'CREATE VIEW ' + geo_schema + '.' + table_name + ' ' + \
+                            query = 'CREATE VIEW ' + views_schema + '.' + table_name + ' ' + \
                                     'AS SELECT ' + ', '.join(['industrial_database.' + c.replace('-', '_') for c in view_col_names]) + time_cols + geom_cols + ' ' + \
                                     'FROM ' + stat_schema + '.' + name + \
                                     time_join + geom_join + \
