@@ -916,54 +916,96 @@ for repository_name in listOfRepositories:
                                 notices=verbose)
 
                 # Compute NUTS 3 from LAU
-                query = "INSERT INTO " + prec_tbl + " (min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
-                        + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
-                        + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.ngid " \
-                        + "FROM " \
-                        + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
-                        + "intr.nuts_id, intr.stat_levl_, intr.fk_" + time_table_name + "_id, intr.ngid " \
-                        + "FROM " \
-                        + "(SELECT l.comm_id, l.geom as lgeom, l.gid as lgid, " \
-            			+ "n.nuts_id, n.geom as ngeom, n.gid as ngid, n.stat_levl_, " \
-            			+ "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, " \
-                        + "data_tbl.mean, data_tbl.fk_" + time_table_name + "_id " \
-                        + "FROM " + lau_table + " l " \
-                        + "LEFT JOIN " + vect_tbl + " n ON ST_Intersects(ST_Transform(l.geom, ST_SRID(n.geom)), n.geom) " \
-                        + "LEFT JOIN " + prec_lau_tbl + " data_tbl ON data_tbl.fk_" + lau_table_name + "_gid = l.gid " \
-                        + "WHERE n.stat_levl_ = 3 " \
-                        + "AND n.year = '2013-01-01' " \
-                        + ") as intr " \
-                        + "WHERE intr.count IS NOT NULL " \
-                        + "AND ST_Covers(intr.ngeom, ST_Transform(intr.lgeom, ST_SRID(intr.ngeom))) " \
-                        + "GROUP BY intr.ngid, intr.nuts_id, intr.ngeom, intr.stat_levl_, intr.fk_" + time_table_name + "_id " \
-                        + ") as i ); "
+                query = """
+with lau as (select s.count, s.sum, s.mean, s.stddev, s.min, s.max, s.comm_id, l.fk_{0}_gid, l.nuts_id, s.fk_{1}_id
+from {2} s
+left join {3} l on l.comm_id = s.comm_id
+)
+insert into {4} (min, max, sum, count, mean, nuts_id, stat_levl_, fk_{1}_id, fk_{0}_gid)
+(select min(lau.min), max(lau.max), sum(lau.sum), sum(lau.count) as count, sum(lau.sum) / cast(sum(lau.count) as numeric(20,2)) as mean,
+n.nuts_id, n.stat_levl_, lau.fk_{1}_id, lau.fk_{0}_gid
+from {5} n
+right join lau on lau.fk_{0}_gid = n.gid
+where n.stat_levl_ = 3 and n.year = '2013-01-01'
+group by n.gid, n.stat_levl_, lau.fk_{0}_gid, lau.fk_time_id)
+;
+""".format(
+    vect_tbl_name,   # 0
+    time_table_name, # 1
+    prec_lau_tbl,    # 2
+    lau_table,       # 3
+    prec_tbl,        # 4
+    vect_tbl,        # 5
+    )
+                # query = "INSERT INTO " + prec_tbl + " (min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
+                #         + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
+                #         + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.ngid " \
+                #         + "FROM " \
+                #         + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
+                #         + "intr.nuts_id, intr.stat_levl_, intr.fk_" + time_table_name + "_id, intr.ngid " \
+                #         + "FROM " \
+                #         + "(SELECT l.comm_id, l.geom as lgeom, l.gid as lgid, " \
+            	# 		+ "n.nuts_id, n.geom as ngeom, n.gid as ngid, n.stat_levl_, " \
+            	# 		+ "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, " \
+                #         + "data_tbl.mean, data_tbl.fk_" + time_table_name + "_id " \
+                #         + "FROM " + lau_table + " l " \
+                #         + "LEFT JOIN " + vect_tbl + " n ON ST_Intersects(ST_Transform(l.geom, ST_SRID(n.geom)), n.geom) " \
+                #         + "LEFT JOIN " + prec_lau_tbl + " data_tbl ON data_tbl.fk_" + lau_table_name + "_gid = l.gid " \
+                #         + "WHERE n.stat_levl_ = 3 " \
+                #         + "AND n.year = '2013-01-01' " \
+                #         + ") as intr " \
+                #         + "WHERE intr.count IS NOT NULL " \
+                #         + "AND ST_Covers(intr.ngeom, ST_Transform(intr.lgeom, ST_SRID(intr.ngeom))) " \
+                #         + "GROUP BY intr.ngid, intr.nuts_id, intr.ngeom, intr.stat_levl_, intr.fk_" + time_table_name + "_id " \
+                #         + ") as i ); "
 
 
                 db.query(commit=True, notices=verbose, query=query)
 
                 # compute NUTS 0-2 from NUTS 3
                 log_print_step("Precompute NUTS 0-2")
-                query = "INSERT INTO " + prec_tbl + " " \
-                        + "(min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
-                        + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
-                        + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.gid " \
-                        + "FROM " \
-                        + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
-                	 	+ "n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id, n.gid " \
-                		+ "FROM ( " \
-                		+ "SELECT data_tbl.nuts_id, data_tbl.fk_" + vect_tbl_name + "_gid, data_tbl.stat_levl_, " \
-                        + "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, data_tbl.mean, " \
-                		+ "data_tbl.fk_" + time_table_name + "_id " \
-                		+ "FROM " + prec_tbl + " data_tbl " \
-                		+ "WHERE data_tbl.stat_levl_ = 3 " \
-                		+ ") as intr " \
-                	 	+ "RIGHT JOIN " + vect_tbl + " n ON intr.nuts_id LIKE n.nuts_id || '%' " \
-                		+ "WHERE intr.count IS NOT NULL  " \
-                	 	+ "AND n.stat_levl_ < 3 " \
-                	 	+ "AND n.year = '2013-01-01' " \
-                        + "GROUP BY n.gid, n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id " \
-                	    + ") as i " \
-                        + "); "
+                query = """
+with nuts3 as (select s.count, s.sum, s.mean, s.min, s.max, s.nuts_id, s.stat_levl_, s.fk_{0}_gid, s.fk_{1}_id
+from {4} s
+where s.stat_levl_ = 3
+)
+insert into {4} (min, max, sum, count, mean, nuts_id, stat_levl_, fk_{1}_id, fk_{0}_gid)
+(select min(nuts3.min), max(nuts3.max), sum(nuts3.sum), sum(nuts3.count) as count, sum(nuts3.sum) / cast(sum(nuts3.count) as numeric(20,2)) as mean,
+n.nuts_id, n.stat_levl_, nuts3.fk_{1}_id, nuts3.fk_{0}_gid
+from {5} n
+right join nuts3 on nuts3.nuts_id LIKE n.nuts_id || '%'
+where nuts3.count is not null and n.stat_levl_ < 3 and n.year = '2013-01-01'
+group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
+;
+""".format(
+    vect_tbl_name,   # 0
+    time_table_name, # 1
+    prec_lau_tbl,    # 2
+    lau_table,       # 3
+    prec_tbl,        # 4
+    vect_tbl,        # 5
+)
+                # query = "INSERT INTO " + prec_tbl + " " \
+                #         + "(min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
+                #         + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
+                #         + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.gid " \
+                #         + "FROM " \
+                #         + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
+                # 	 	+ "n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id, n.gid " \
+                # 		+ "FROM ( " \
+                # 		+ "SELECT data_tbl.nuts_id, data_tbl.fk_" + vect_tbl_name + "_gid, data_tbl.stat_levl_, " \
+                #         + "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, data_tbl.mean, " \
+                # 		+ "data_tbl.fk_" + time_table_name + "_id " \
+                # 		+ "FROM " + prec_tbl + " data_tbl " \
+                # 		+ "WHERE data_tbl.stat_levl_ = 3 " \
+                # 		+ ") as intr " \
+                # 	 	+ "RIGHT JOIN " + vect_tbl + " n ON intr.nuts_id LIKE n.nuts_id || '%' " \
+                # 		+ "WHERE intr.count IS NOT NULL  " \
+                # 	 	+ "AND n.stat_levl_ < 3 " \
+                # 	 	+ "AND n.year = '2013-01-01' " \
+                #         + "GROUP BY n.gid, n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id " \
+                # 	    + ") as i " \
+                #         + "); "
 
                 db.query(commit=True, notices=verbose, query=query)
 
