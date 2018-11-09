@@ -341,6 +341,7 @@ try:
     listOfRepositories.remove('HotmapsLAU')
     listOfRepositories.remove('lau2')
     listOfRepositories.remove('NUTS')
+    listOfRepositories.remove('potential_wind')
     listOfRepositories.remove('.git')
 except:
     pass
