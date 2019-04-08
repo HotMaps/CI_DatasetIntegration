@@ -27,9 +27,16 @@ from taiga.exceptions import TaigaException
 
 skip_git = True
 
-manual_repo_list = ['potential_wind']
+#manual_repo_list = ['load_profile_tertiary_shw_yearlong_2010']
+manual_repo_list = ['load_profile_residential_shw_yearlong_2010']
+#manual_repo_list = ['load_profile_residential_heating_yearlong_2010']
+
 manual_repo_id_list = {}
-manual_repo_id_list['potential_wind'] = 4881468
+#manual_repo_id_list['potential_biomass'] = 4813804
+#manual_repo_id_list['load_profile_tertiary_shw_yearlong_2010'] = 5718445
+manual_repo_id_list['load_profile_residential_shw_yearlong_2010'] = 5718074
+#manual_repo_id_list['load_profile_residential_heating_yearlong_2010'] = 5718036
+
 # manual_repo_id_list['scen_all_scenarios_electr_district_heat_efficiency_total'] = 7813021
 
 

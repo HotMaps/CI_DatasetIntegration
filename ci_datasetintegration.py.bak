@@ -1,6 +1,5 @@
 # python 3.5
 import sys
-import re
 import json
 from pprint import pprint
 import os.path
@@ -13,7 +12,7 @@ import logging
 import subprocess
 import csv
 from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, \
-    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port, TAIGA_token, GIT_token, SERVER, DEBUG
+    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port, TAIGA_token, GIT_token
 from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
@@ -30,16 +29,10 @@ log_start_time = time()
 log_previous_time = log_start_time
 print(strftime("Execution start time: %Y-%m-%d %H:%M:%S +0000", gmtime(log_start_time)))
 
-try:
-    taiga_api = TaigaAPI(token=TAIGA_token)
-    taiga_project = taiga_api.projects.get_by_slug('widmont-hotmaps')
-except:
-    print("Could not connect to Taiga. Token might be outdated")
-    taiga_api = None
-    taiga_project = None
-
+taiga_api = TaigaAPI(token=TAIGA_token)
+taiga_project = taiga_api.projects.get_by_slug('widmont-hotmaps')
 logging.basicConfig(level=logging.INFO)
-
+taiga_api = None
 # schemas
 stat_schema = 'stat'  # 'stat' on production/dev database
 geo_schema = 'geo'  # 'geo' on production/dev database
@@ -93,21 +86,15 @@ def log_print_step(text):
     print("Ellapsed time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours),int(minutes),seconds))
     log_previous_time = log_end_time
 
-def post_issue(name, description, issue_type='Dataset integration', tags=[]):
-    if DEBUG:
-        print(name, description, issue_type, tags.append(SERVER))
-        return
-    tags.append(SERVER)
-    if taiga_project is not None:
-        issue = taiga_project.add_issue(
-            name,
-            taiga_project.priorities.get(name='Workaround possible - Low').id,
-            taiga_project.issue_statuses.get(name='New').id,
-            taiga_project.issue_types.get(name=issue_type).id,
-            taiga_project.severities.get(name='Minor').id,
-            description=description,
-            tags=tags
-        )
+def post_issue(name, description, issue_type='Dataset integration'):
+    issue = taiga_project.add_issue(
+        name,
+        taiga_project.priorities.get(name='Workaround possible - Low').id,
+        taiga_project.issue_statuses.get(name='New').id,
+        taiga_project.issue_types.get(name=issue_type).id,
+        taiga_project.severities.get(name='Minor').id,
+        description=description
+    )
 
 def post_issue_repo(project, name, description):
     issue = project.issues.create({'title': name, 'description': description})
@@ -118,26 +105,19 @@ def get_property_datapackage(obj, property_name, repo_name, resource_name):
     except:
         post_issue(name='Integration of resource failed - repository ' + repo_name,
                    description='No vector attribute provided for resource "' + resource_name + '". The resource has been skipped.'
-                             + 'Make sure that "' + property_name + '" attribute is correctly declared in the "datapackage.json" file',
-                   issue_type='Dataset Provider improvement needed')
+                             + 'Make sure that "' + property_name + '" attribute is correctly declared in the "datapackage.json" file')
 
 def parse_date(str):
-    for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S', '%d.%m.%Y %H:%M:%S',
-                   '%Y/%m/%d %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M', '%d.%m.%Y %H:%M',
-                   '%Y/%m/%d', '%Y-%m-%d', '%d/%m/%Y', '%d.%m.%Y',
-                   '%Y/%m', '%Y-%m', '%m/%Y', '%m.%Y',
-                   '%Y'):
+    for format in ('%Y/%m/%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S',
+                   '%Y/%m/%d %H:%M', '%Y-%m-%d %H:%M', '%d/%m/%Y %H:%M'):
         try:
             return datetime.strptime(str, format)
         except:
             pass
     raise ValueError('date format not supported! excpecting: ',
-                     '%Y/%m/%d %H:%M:%S', ' or ', '%Y-%m-%d %H:%M:%S', ' or ', '%d.%m.%Y %H:%M:%S', ' or ',
-                     '%d/%m/%Y %H:%M:%S', ' or ', '%Y/%m/%d %H:%M', ' or ', '%d.%m.%Y %H:%M', ' or ',
-                     '%Y-%m-%d %H:%M', ' or ', '%d/%m/%Y %H:%M', ' or ',
-                     '%Y/%m/%d', ' or ', '%Y-%m-%d', ' or ', '%d/%m/%Y', '%d.%m.%Y', ' or ',
-                     '%Y/%m', ' or ', '%Y-%m', ' or ', '%m/%Y', ' or ', '%m.%Y', ' or ',
-                     '%Y')
+                     '%Y/%m/%d %H:%M:%S', ' or ', '%Y-%m-%d %H:%M:%S', ' or ',
+                     '%d/%m/%Y %H:%M:%S', ' or ', '%Y/%m/%d %H:%M', ' or ',
+                     '%Y-%m-%d %H:%M', ' or ', '%d/%m/%Y %H:%M')
 
 def get_or_create_time_id(timestamp, granularity):
     t = timestamp
@@ -232,7 +212,7 @@ def update_or_create_repo(repo_name, git_id):
 
     return repo_id
 
-def import_shapefile(src_file, date, attributes_names):
+def import_shapefile(src_file, date):
     # import shp
     # src_file = os.path.join("git-repos", "HotmapsLAU", "data", "HotmapsLAU.shp")
     shapefile = osgeo.ogr.Open(src_file)
@@ -304,6 +284,7 @@ log_print_step("Clone/Update repositories")
 for subgroup in subgroups:
     hotmapsGroups.append(gl.groups.get(subgroup.id, lazy=True))
 
+
 for group in hotmapsGroups:
     projects = group.projects.list(all=True)
     print(projects)
@@ -348,14 +329,11 @@ try:
     listOfRepositories.remove('HotmapsLAU')
     listOfRepositories.remove('lau2')
     listOfRepositories.remove('NUTS')
-    listOfRepositories.remove('potential_wind')
     listOfRepositories.remove('.git')
 except:
     pass
 
 for repository_name in listOfRepositories:
-    if repository_name == 'HotmapsLAU' or repository_name == 'lau2' or repository_name == 'NUTS':
-        continue
     """
         VALIDATION
     """
@@ -365,11 +343,6 @@ for repository_name in listOfRepositories:
     repo_path = os.path.join(repositories_base_path, repository_name)
     if not os.path.isdir(repo_path):
         print('repo_path is not a directory')
-        msg = 'repository path is not a directory'
-        post_issue(name='Validation error ' + repository_name,
-                   description='The repository validation was not successful.\n' + msg,
-                   issue_type='Dataset Provider improvement needed')
-        continue
 
     content = os.listdir('.')
 
@@ -377,21 +350,11 @@ for repository_name in listOfRepositories:
     dp_file_path = os.path.join(repo_path, 'datapackage.json')
     if not os.path.isfile(dp_file_path):
         print('datapackage.json file missing or not in correct directory')
-        msg = 'datapackage.json file missing or not in correct directory'
-        post_issue(name='Validation error ' + repository_name,
-                   description='The repository validation was not successful.\n' + msg,
-                   issue_type='Dataset Provider improvement needed')
-        continue
 
     # check that data directory is present
     data_dir_path = os.path.join(repo_path, 'data')
     if not os.path.isdir(data_dir_path):
         print('data directory missing')
-        msg = 'data directory missing'
-        post_issue(name='Validation error ' + repository_name,
-                   description='The repository validation was not successful.\n' + msg,
-                   issue_type='Dataset Provider improvement needed')
-        continue
 
     # check datapackage file
     #is_valid = validate_datapackage.validate_datapackage(dp_file_path)
@@ -407,29 +370,11 @@ for repository_name in listOfRepositories:
     error_messages = []
 
     # open file
-    # check if file construction is valid
     try:
-        with open(dp_file_path) as f:
-            dp = json.load(f)
-    except json.decoder.JSONDecodeError as e:
-        msg = 'JSON decoding raised an exception.\n' + str(e)
-        print(msg)
-        post_issue(name='Validation error ' + repository_name,
-                   description='The repository validation was not successful.\n' + msg,
-                   issue_type='Dataset Provider improvement needed')
-        continue
-
-    # create tags from contributors (data providers)
-    try:
-        contributors = dp['contributors']
-        tags = []
-        for c in contributors:
-            print(c['title'])
-            tags.append(c['title'])
-    except KeyError as e:
-        tags = []
-
-
+        dp = json.load(open(dp_file_path))
+    except:
+        print('can\'t open file datapackage.json')
+        dp = {}
     # profile
     try:
         dp_profile = dp['profile']
@@ -443,8 +388,6 @@ for repository_name in listOfRepositories:
         dp_resources = None
 
     # check resources attributes
-    has_geom = None # variable used to detect geometries in datapacakge
-
     if dp_resources:
         if dp_profile == 'vector-data-resource':
             for dp_r in dp_resources:
@@ -453,12 +396,7 @@ for repository_name in listOfRepositories:
                 for p in props:
                     try:
                         a = dp_r[p]
-                        if p == 'name':
-                            if len(a) > 50:
-                                error_messages.append('resource/name length is too long (max 50 char.)')
-                            if a.endswith(('.csv', '.tif', '.tiff', '.shp', '.geojson', '.txt')):
-                                error_messages.append('resource/name should not contain a file extension (extension is in resource/path)')
-                    except KeyError as e:
+                    except:
                         missing_properties.append('resources/' + p)
                 try:
                     dp_path = dp_r['path']
@@ -510,12 +448,7 @@ for repository_name in listOfRepositories:
                 for p in props:
                     try:
                         a = dp_r[p]
-                        if p == 'name':
-                            if len(a) > 50:
-                                error_messages.append('resource/name length is too long (max 50 char.)')
-                            if a.endswith(('.csv', '.tif', '.tiff', '.shp', '.geojson', '.txt')):
-                                error_messages.append('resource/name should not contain a file extension (extension is in resource/path)')
-                    except KeyError as e:
+                    except:
                         missing_properties.append('resources/' + p)
                 try:
                     dp_path = dp_r['path']
@@ -535,12 +468,7 @@ for repository_name in listOfRepositories:
                 for p in props:
                     try:
                         a = dp_r[p]
-                        if p == 'name':
-                            if len(a) > 50:
-                                error_messages.append('resource/name length is too long (max 50 char.)')
-                            if a.endswith(('.csv', '.tif', '.tiff', '.shp', '.geojson', '.txt')):
-                                error_messages.append('resource/name should not contain a file extension (extension is in resource/path)')
-                    except KeyError as e:
+                    except:
                         missing_properties.append('resources/' + p)
                 # fields
                 has_geom = False
@@ -567,17 +495,13 @@ for repository_name in listOfRepositories:
                         error_messages.append('spatial_key_field does not refer to an existing field name')
                 else:
                     if not has_geom:
-                        error_messages.append('no geometry provided (nuts/lau reference [attribute spatial_key_field and spatial_resolution] or geometry field)\n'
-                                              + '\tThe dataset will be integrated as is but make sure that no geometry is needed.')
-
+                        error_messages.append('no geometry provided (nuts/lau reference [attribute spatial_key_field and spatial_resolution] or geometry field)')
         else:
             err_msg = '\'profile\' contains an unsupported value! Use only vector-data-resource, raster-data-resource or tabular-data-resource'
             print(err_msg)
             error_messages.append(err_msg)
 
-    number_of_errors = len(error_messages) + len(missing_properties)
-    print("number of errors found: ", number_of_errors)
-    if number_of_errors > 0:
+    if len(error_messages) + len(missing_properties) > 0:
         str_error_messages = ''
         if len(error_messages) > 0:
             str_error_messages = 'Errors: \n' + '\n'.join(error_messages)
@@ -586,18 +510,9 @@ for repository_name in listOfRepositories:
         if len(missing_properties) > 0:
             str_error_messages = 'Missing properties: \n' + '\n'.join(missing_properties)
         print('Validation error for repository ' + repository_name + '\n' + str_error_messages)
-
         post_issue(name='Validation error ' + repository_name,
-                   description='The repository validation was not successful.\n' + str_error_messages,
-                   issue_type='Dataset Provider improvement needed',
-                   tags=tags)
-
-        if has_geom is not None and number_of_errors == 1 and has_geom is False:
-            pass # allow datasets without geometry
-            print('Resource integration continuing despite geom error.')
-        else:
-            print('Resource integration aborted.')
-            continue # otherwise skip dataset
+                   description='The repository validation was not successful.\n' + str_error_messages)
+        continue
     else:
         print('Validation OK')
 
@@ -614,20 +529,18 @@ for repository_name in listOfRepositories:
         gis_data_type = dp['profile']
         gis_resources = dp['resources']
         dataset_version = dp['version']
-        table_name = re.sub('[^A-Za-z0-9]+', '_', dp['name'].lower().replace("hotmaps", ""))
+        table_name = dp['name'].lower().replace("hotmaps", "").replace(".", "_").replace(";", "_").replace("-", "_").replace(" ", "_")
 
         print(dp)
+        print(table_name)
 
         for r in gis_resources:
             log_print_step("Start resource")
             format = r['format']
             name = r['name']
             path = r['path']
-            table_name = re.sub('[^A-Za-z0-9]+', '_', name.lower().replace("hotmaps", ""))
-            print('table_name =', table_name)
-
             # date = r['date']
-            raster_table_name = table_name
+            raster_table_name = name.lower().replace("hotmaps", "").replace(".", "_").replace(";", "_").replace("-", "_").replace(" ", "_")
             precomputed_table_name_lau = raster_table_name + "_" + lau_table_name
             precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name
 
@@ -657,8 +570,6 @@ for repository_name in listOfRepositories:
                         col_type = 'varchar(255)'
                     elif col_type == 'integer':
                         col_type = 'bigint'
-                    elif col_type == 'double':
-                        col_type = 'numeric(20,2)'
                     elif col_type == 'float':
                         col_type = 'numeric(20,2)'
                     elif col_type == 'boolean':
@@ -713,7 +624,7 @@ for repository_name in listOfRepositories:
 
                 log_print_step("Start shapefile importation")
                 # import shapefile
-                import_shapefile(os.path.join(repository_path, path), start_date, attributes_names)  # (base_path, 'git-repos', repository_name, path))
+                import_shapefile(os.path.join(repository_path, path), start_date)  # (base_path, 'git-repos', repository_name, path))
 
                 log_print_step("Start geoserver integration")
                 # add to geoserver
@@ -724,14 +635,14 @@ for repository_name in listOfRepositories:
                 # remove previous layer from geoserver
                 # remove layer
                 response = requests.delete(
-                    GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
                     auth=(GEO_user, GEO_password),
                 )
                 print(response, response.content)
 
                 # remove feature type
                 response = requests.delete(
-                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
                     auth=(GEO_user, GEO_password),
                 )
                 print(response, response.content)
@@ -747,7 +658,7 @@ for repository_name in listOfRepositories:
                        + '</featureType>'
 
                 response = requests.post(
-                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
                     headers=headers,
                     data=data,
                     auth=(GEO_user, GEO_password),
@@ -837,12 +748,12 @@ for repository_name in listOfRepositories:
                 # Precompute layers for nuts and lau
                 # LAU
                 log_print_step("Precompute LAU")
-                vect_tbl = lau_table
+                vect_tbl = "geo." + lau_table_name
                 vect_tbl_name = lau_table_name
                 prec_tbl = stat_schema + '.' + precomputed_table_name_lau
                 prec_tbl_name = precomputed_table_name_lau
 
-                db.drop_table(table_name=prec_tbl, notices=verbose, cascade=True)
+                db.drop_table(table_name=prec_tbl, notices=verbose)
 
                 attributes_names = (
                     'count', 'sum', 'mean', 'stddev', 'min', 'max',
@@ -896,7 +807,7 @@ for repository_name in listOfRepositories:
                 vect_tbl_name = nuts_table_name
                 prec_tbl_name = precomputed_table_name_nuts
 
-                db.drop_table(table_name=prec_tbl, notices=verbose, cascade=True)
+                db.drop_table(table_name=prec_tbl, notices=verbose)
 
                 attributes_names = (
                     'min', 'max', 'sum', 'count',
@@ -924,96 +835,54 @@ for repository_name in listOfRepositories:
                                 notices=verbose)
 
                 # Compute NUTS 3 from LAU
-                query = """
-with lau as (select s.count, s.sum, s.mean, s.stddev, s.min, s.max, s.comm_id, l.fk_{0}_gid, l.nuts_id, s.fk_{1}_id
-from {2} s
-left join {3} l on l.comm_id = s.comm_id
-)
-insert into {4} (min, max, sum, count, mean, nuts_id, stat_levl_, fk_{1}_id, fk_{0}_gid)
-(select min(lau.min), max(lau.max), sum(lau.sum), sum(lau.count) as count, sum(lau.sum) / cast(sum(lau.count) as numeric(20,2)) as mean,
-n.nuts_id, n.stat_levl_, lau.fk_{1}_id, lau.fk_{0}_gid
-from {5} n
-right join lau on lau.fk_{0}_gid = n.gid
-where n.stat_levl_ = 3 and n.year = '2013-01-01'
-group by n.gid, n.stat_levl_, lau.fk_{0}_gid, lau.fk_time_id)
-;
-""".format(
-    vect_tbl_name,   # 0
-    time_table_name, # 1
-    prec_lau_tbl,    # 2
-    lau_table,       # 3
-    prec_tbl,        # 4
-    vect_tbl,        # 5
-    )
-                # query = "INSERT INTO " + prec_tbl + " (min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
-                #         + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
-                #         + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.ngid " \
-                #         + "FROM " \
-                #         + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
-                #         + "intr.nuts_id, intr.stat_levl_, intr.fk_" + time_table_name + "_id, intr.ngid " \
-                #         + "FROM " \
-                #         + "(SELECT l.comm_id, l.geom as lgeom, l.gid as lgid, " \
-            	# 		+ "n.nuts_id, n.geom as ngeom, n.gid as ngid, n.stat_levl_, " \
-            	# 		+ "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, " \
-                #         + "data_tbl.mean, data_tbl.fk_" + time_table_name + "_id " \
-                #         + "FROM " + lau_table + " l " \
-                #         + "LEFT JOIN " + vect_tbl + " n ON ST_Intersects(ST_Transform(l.geom, ST_SRID(n.geom)), n.geom) " \
-                #         + "LEFT JOIN " + prec_lau_tbl + " data_tbl ON data_tbl.fk_" + lau_table_name + "_gid = l.gid " \
-                #         + "WHERE n.stat_levl_ = 3 " \
-                #         + "AND n.year = '2013-01-01' " \
-                #         + ") as intr " \
-                #         + "WHERE intr.count IS NOT NULL " \
-                #         + "AND ST_Covers(intr.ngeom, ST_Transform(intr.lgeom, ST_SRID(intr.ngeom))) " \
-                #         + "GROUP BY intr.ngid, intr.nuts_id, intr.ngeom, intr.stat_levl_, intr.fk_" + time_table_name + "_id " \
-                #         + ") as i ); "
+                query = "INSERT INTO " + prec_tbl + " (min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
+                        + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
+                        + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.ngid " \
+                        + "FROM " \
+                        + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
+                        + "intr.nuts_id, intr.stat_levl_, intr.fk_" + time_table_name + "_id, intr.ngid " \
+                        + "FROM " \
+                        + "(SELECT l.comm_id, l.geom as lgeom, l.gid as lgid, " \
+            			+ "n.nuts_id, n.geom as ngeom, n.gid as ngid, n.stat_levl_, " \
+            			+ "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, " \
+                        + "data_tbl.mean, data_tbl.fk_" + time_table_name + "_id " \
+                        + "FROM " + lau_table + " l " \
+                        + "LEFT JOIN " + vect_tbl + " n ON ST_Intersects(ST_Transform(l.geom, ST_SRID(n.geom)), n.geom) " \
+                        + "LEFT JOIN " + prec_lau_tbl + " data_tbl ON data_tbl.fk_" + lau_table_name + "_gid = l.gid " \
+                        + "WHERE n.stat_levl_ = 3 " \
+                        + "AND n.year = '2013-01-01' " \
+                        + ") as intr " \
+                        + "WHERE intr.count IS NOT NULL " \
+                        + "AND ST_Covers(intr.ngeom, ST_Transform(intr.lgeom, ST_SRID(intr.ngeom))) " \
+                        + "GROUP BY intr.ngid, intr.nuts_id, intr.ngeom, intr.stat_levl_, intr.fk_" + time_table_name + "_id " \
+                        + ") as i ); "
 
 
                 db.query(commit=True, notices=verbose, query=query)
 
                 # compute NUTS 0-2 from NUTS 3
                 log_print_step("Precompute NUTS 0-2")
-                query = """
-with nuts3 as (select s.count, s.sum, s.mean, s.min, s.max, s.nuts_id, s.stat_levl_, s.fk_{0}_gid, s.fk_{1}_id
-from {4} s
-where s.stat_levl_ = 3
-)
-insert into {4} (min, max, sum, count, mean, nuts_id, stat_levl_, fk_{1}_id, fk_{0}_gid)
-(select min(nuts3.min), max(nuts3.max), sum(nuts3.sum), sum(nuts3.count) as count, sum(nuts3.sum) / cast(sum(nuts3.count) as numeric(20,2)) as mean,
-n.nuts_id, n.stat_levl_, nuts3.fk_{1}_id, nuts3.fk_{0}_gid
-from {5} n
-right join nuts3 on nuts3.nuts_id LIKE n.nuts_id || '%'
-where nuts3.count is not null and n.stat_levl_ < 3 and n.year = '2013-01-01'
-group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
-;
-""".format(
-    vect_tbl_name,   # 0
-    time_table_name, # 1
-    prec_lau_tbl,    # 2
-    lau_table,       # 3
-    prec_tbl,        # 4
-    vect_tbl,        # 5
-)
-                # query = "INSERT INTO " + prec_tbl + " " \
-                #         + "(min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
-                #         + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
-                #         + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.gid " \
-                #         + "FROM " \
-                #         + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
-                # 	 	+ "n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id, n.gid " \
-                # 		+ "FROM ( " \
-                # 		+ "SELECT data_tbl.nuts_id, data_tbl.fk_" + vect_tbl_name + "_gid, data_tbl.stat_levl_, " \
-                #         + "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, data_tbl.mean, " \
-                # 		+ "data_tbl.fk_" + time_table_name + "_id " \
-                # 		+ "FROM " + prec_tbl + " data_tbl " \
-                # 		+ "WHERE data_tbl.stat_levl_ = 3 " \
-                # 		+ ") as intr " \
-                # 	 	+ "RIGHT JOIN " + vect_tbl + " n ON intr.nuts_id LIKE n.nuts_id || '%' " \
-                # 		+ "WHERE intr.count IS NOT NULL  " \
-                # 	 	+ "AND n.stat_levl_ < 3 " \
-                # 	 	+ "AND n.year = '2013-01-01' " \
-                #         + "GROUP BY n.gid, n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id " \
-                # 	    + ") as i " \
-                #         + "); "
+                query = "INSERT INTO " + prec_tbl + " " \
+                        + "(min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
+                        + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
+                        + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.gid " \
+                        + "FROM " \
+                        + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
+                	 	+ "n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id, n.gid " \
+                		+ "FROM ( " \
+                		+ "SELECT data_tbl.nuts_id, data_tbl.fk_" + vect_tbl_name + "_gid, data_tbl.stat_levl_, " \
+                        + "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, data_tbl.mean, " \
+                		+ "data_tbl.fk_" + time_table_name + "_id " \
+                		+ "FROM " + prec_tbl + " data_tbl " \
+                		+ "WHERE data_tbl.stat_levl_ = 3 " \
+                		+ ") as intr " \
+                	 	+ "RIGHT JOIN " + vect_tbl + " n ON intr.nuts_id LIKE n.nuts_id || '%' " \
+                		+ "WHERE intr.count IS NOT NULL  " \
+                	 	+ "AND n.stat_levl_ < 3 " \
+                	 	+ "AND n.year = '2013-01-01' " \
+                        + "GROUP BY n.gid, n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id " \
+                	    + ") as i " \
+                        + "); "
 
                 db.query(commit=True, notices=verbose, query=query)
 
@@ -1043,7 +912,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
 
                 # remove coverage store from geoserver
                 response = requests.delete(
-                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '?recurse=true',
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '?recurse=true',
                     auth=(GEO_user, GEO_password),
                 )
                 print(response, response.content)
@@ -1060,7 +929,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                        '</coverageStore>'
 
                 response = requests.post(
-                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
                     headers=headers,
                     data=data,
                     auth=(GEO_user, GEO_password),
@@ -1076,7 +945,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                        '</coverage>'
 
                 response = requests.post(
-                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '/coverages',
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '/coverages',
                     headers=headers,
                     data=data,
                     auth=(GEO_user, GEO_password),
@@ -1086,7 +955,6 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
 
             elif gis_data_type == 'tabular-data-resource':
                 log_print_step("Read datapackage for CSV")
-
                 schema = r['schema']
 
                 # retrieve start and end date
@@ -1104,10 +972,9 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 # file path
                 tabular_file_path = repository_path + '/' + path
 
-                # retrieve csv dialect and encoding
+                # retrieve csv dialect
                 delimiter = ','
                 double_quote = True
-                encoding = 'utf-8'
                 #lineterminator = '\r\n'
                 try:
                     dialect = r['dialect']
@@ -1122,10 +989,6 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 except:
                     print('No doubleQuote provided for this dialect')
                 # lineterminator = dialect['lineterminator']
-                try:
-                    encoding = r['encoding']
-                except:
-                    print('No encoding provided for this resource')
 
                 fields = schema['fields']
 
@@ -1137,42 +1000,33 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 count_geom_cols = 0
 
                 for att in fields:
-                    col_type = att['type'].lower()
+                    col_type = att['type']
                     if col_type == 'string':
                         col_type = 'varchar(255)'
-                        att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'integer':
                         col_type = 'bigint'
                     elif col_type == 'number':
-                        col_type = 'numeric(20,2)'
-                    elif col_type == 'double':
                         col_type = 'numeric(20,2)'
                     elif col_type == 'float':
                         col_type = 'numeric(20,2)'
                     elif col_type == 'boolean':
                         col_type = 'boolean'
-                        att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'date':
-                        col_type = 'varchar(255)'
-                        att['unit'] = '' # prevent error if user set unit on geometry reference column
+                        col_type = 'date'
                     elif col_type == 'datetime':
-                        col_type = 'varchar(255)'
-                        att['unit'] = '' # prevent error if user set unit on geometry reference column
+                        col_type = 'timestamp'
                     elif col_type == 'timestamp':
-                        col_type = 'varchar(255)'
-                        att['unit'] = '' # prevent error if user set unit on geometry reference column
+                        col_type = 'timestamp'
                     elif col_type == 'geom' or col_type == 'geometry':
                         col_type = 'geometry'
                         count_geom_cols = count_geom_cols + 1
-                        att['unit'] = '' # prevent error if user set unit on geometry reference column
                     else:
                         print('Unhandled table type ', col_type)
                         break
 
-                    col_name = re.sub('[^A-Za-z0-9]+', '_', att['name'].lower()) # prevent unwanted chars
-                    while col_name in attributes_names: # append '_1' if duplicate
-                        col_name = col_name + '_1'
-                    attributes_names.append(att['name'])
+                    col_name = att['name']
+                    attributes_names.append(col_name)
+                    col_name = col_name.replace('-', '_')
                     db_attributes_names.append(col_name)
                     attributes_types.append(col_type)
                     attributes_units.append(att['unit'])
@@ -1221,23 +1075,22 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     #     reader = csv.reader(f)
                     #     column_names = next(reader)
 
-                if missing_geometry is True:
-                    print('No spatial reference or geometry provided. The dataset should contain at least one geolocalized data. The dataset will be integrated as is but make sure that no geometry is needed.')
-                    # post_issue(name='Integration of resource failed - repository ' + repository_name,
-                    #            description='No spatial reference or geometry provided for resource "' + name + '". The resource has been skipped. '
-                    #                      + 'The dataset must contain at least one geolocalized data (geometry or reference to spatial resolutions (NUTS/LAU)). '
-                    #                      + 'Make sure that the geometry column is of type "geometry" or that "spatial_resolution" and "spatial_key_field" attributes are correctly declared in the "datapackage.json" file. '
-                    #                      + 'The dataset will be integrated as is but if you get this error and your dataset should contain a geometry, please make sure it is declared correctly. Otherwise you might delete this issue.')
-                    # continue # turned off to allow the integration of datasets without geometry. uncomment to restrict
-                else:
-                    if spatial_resolution and spatial_resolution.lower().startswith("nuts"):
-                        spatial_table_name = nuts_table_name
-                        spatial_table = nuts_table
-                        spatial_type = 'N'
-                    elif spatial_resolution and spatial_resolution.lower().startswith("lau"):
-                        spatial_table_name = lau_table_name
-                        spatial_table = lau_table
-                        spatial_type = 'L'
+                if missing_geometry:
+                    print('No spatial reference or geometry provided. The dataset must contain at least one geolocalized data.')
+                    post_issue(name='Integration of resource failed - repository ' + repository_name,
+                               description='No spatial reference or geometry provided for resource "' + name + '". The resource has been skipped.'
+                                         + 'The dataset must contain at least one geolocalized data (geometry or reference to spatial resolutions (NUTS/LAU)). '
+                                         + 'Make sure that the geometry column is of type "geometry" or that "spatial_resolution" and "spatial_key_field" attributes are correctly declared in the "datapackage.json" file')
+                    continue
+
+                if spatial_resolution and spatial_resolution.lower().startswith("nuts"):
+                    spatial_table_name = nuts_table_name
+                    spatial_table = nuts_table
+                    spatial_type = 'N'
+                elif spatial_resolution and spatial_resolution.lower().startswith("lau"):
+                    spatial_table_name = lau_table_name
+                    spatial_table = lau_table
+                    spatial_type = 'L'
 
                 # temporal resolution
                 temporal_resolution = ''
@@ -1264,30 +1117,23 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     temporal_resolution = 'week'
 
                 constraints = ""
-                if spatial_table is not None and missing_geometry is False:
-                    # add spatial relationship in table
-                    constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
-                                  + "SELECT 1 FROM pg_constraint WHERE conname = \'" + table_name + "_" + spatial_table_name + "_gid_fkey\') THEN " \
-                                  + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
+                if spatial_table is not None:
+                    constraints = constraints + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
                                   + "ADD CONSTRAINT " + table_name + "_" + spatial_table_name + "_gid_fkey " \
                                   + "FOREIGN KEY (fk_" + spatial_table_name + "_gid) " \
                                   + "REFERENCES " + spatial_table + "(gid) " \
-                                  + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
-                                  + "END IF; END; $$; "
+                                  + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL ;"
 
                     db_attributes_names.append('fk_' + spatial_table_name + '_gid')
                     db_attributes_types.append('bigint')
 
+
                 if temporal_resolution is not None and len(temporal_resolution) > 0:
-                    # add temporal relationship in table
-                    constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
-                                  + "SELECT 1 FROM pg_constraint WHERE conname = \'" + table_name + "_" + time_table_name + "_id_fkey\') THEN " \
-                                  + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
-                                  + "ADD CONSTRAINT " + table_name + "_" + time_table_name + "_id_fkey " \
-                                  + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
-                                  + "REFERENCES " + time_table + "(id) " \
-                                  + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
-                                  + "END IF; END; $$; "
+                    constraints = constraints + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
+                                      + "ADD CONSTRAINT " + table_name + "_" + time_table_name + "_id_fkey " \
+                                      + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
+                                      + "REFERENCES " + time_table + "(id) " \
+                                      + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL ;"
 
                     db_attributes_names.append('fk_' + time_table_name + '_id')
                     db_attributes_types.append('bigint')
@@ -1298,9 +1144,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                                 col_types=db_attributes_types, id_col_name='id', constraints_str=constraints)
 
                 log_print_step("Integrate CSV in database")
-                if encoding == 'utf-8' or encoding == 'utf_8' or encoding == 'utf8' or encoding == 'u8':
-                    encoding = 'utf-8-sig'
-                file = open(tabular_file_path, "r", encoding=encoding)
+                file = open(tabular_file_path, "r", encoding='utf-8-sig')
                 csv.register_dialect('custom', delimiter=delimiter, doublequote=double_quote) # lineterminator=lineterminator
                 reader = csv.DictReader(f=file, dialect='custom')
 
@@ -1316,9 +1160,6 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                             att = row[name]
                         except:
                             print(name, ' attribute does not match a column name ', row)
-                            post_issue(name='Integration failed - repository ' + repository_name,
-                                       description=name + ' attribute does not match a column name ' + row + '\n' + traceback.format_exc(),
-                                       issue_type='Data Provider improvement needed', tags=tags)
                             continue
 
                         # check type
@@ -1329,23 +1170,22 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                                 pass
 
                         # handle spatial column
-                        if missing_geometry is False:
-                            if name == spatial_field_name:
-                                # nuts
-                                if spatial_type == 'N':  # NUTS
-                                    fk_gid = db.query(commit=True,
-                                                      query="SELECT gid FROM " + spatial_table + " WHERE year = '2013-01-01' AND nuts_id LIKE '" + att.upper() + "'")
-                                elif spatial_type == 'L':  # LAU
-                                    fk_gid = db.query(commit=True,
-                                                      query="SELECT gid FROM " + spatial_table + " WHERE comm_id LIKE '" + att.upper() + "'")
+                        if name == spatial_field_name:
+                            # nuts
+                            if spatial_type == 'N':  # NUTS
+                                fk_gid = db.query(commit=True,
+                                                  query="SELECT gid FROM " + spatial_table + " WHERE year = '2013-01-01' AND nuts_id LIKE '" + att + "'")
+                            elif spatial_type == 'L':  # LAU
+                                fk_gid = db.query(commit=True,
+                                                  query="SELECT gid FROM " + spatial_table + " WHERE comm_id LIKE '" + att + "'")
 
-                                if fk_gid is not None and len(fk_gid) > 0 and len(fk_gid[0]) > 0:
-                                    fk_gid = fk_gid[0][0]
-                                else:
-                                    print("No geometry found for reference: " + att + ". Skipping.")
-                                    skip = True
+                            if fk_gid is not None and len(fk_gid) > 0 and len(fk_gid[0]) > 0:
+                                fk_gid = fk_gid[0][0]
+                            else:
+                                print("No geometry found for reference: " + att + ". Skipping.")
+                                skip = True
 
-                                print('fk_gid=', fk_gid)
+                            print('fk_gid=', fk_gid)
 
                         # handle temporal column
                         fk_time_id = None
@@ -1353,11 +1193,10 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                             fk_time_id = get_or_create_time_id(timestamp=att, granularity=temporal_resolution)
                             print('fk_time_id=', fk_time_id)
                         elif name == 'timestamp':
-                            name = 'timestamp'
                             timestamp = datetime.fromtimestamp(att).strftime('%Y/%m/%d %H:%M:%S')
-                            fk_time_id = get_or_create_time_id(timestamp=timestamp, granularity=temporal_resolution)
+                            fk_time_id = db.query(commit=True,
+                                                  query="SELECT id FROM stat.time WHERE timestamp = '" + timestamp + "' AND granularity LIKE '" + temporal_resolution + "'")
                             print('fk_time_id=', fk_time_id)
-
 
                         if att == '':
                             att = None
@@ -1392,177 +1231,78 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     #        [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
                     #    map(str_with_single_quotes, values)) + ')')
 
-                if missing_geometry is False:
-                    # create view for Geoserver (if contains geometries / or refs to existing geometries)
-                    log_print_step("Create view for Geoserver")
-                    if fk_time_id:
-                        time_cols = ', ' + time_table_name + '.timestamp'
-                        time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
-                                    'ON (' + table_name + '.fk_time_id = ' + time_table_name + '.id)'
-                    else:
-                        time_cols = ''
-                        time_join = ''
+                # create view for Geoserver (if contains geometries / or refs to existing geometries)
+                log_print_step("Create view for Geoserver")
+                if fk_time_id:
+                    time_cols = ', ' + time_table_name + '.timestamp'
+                    time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
+                                'ON (' + table_name + '.fk_time_id = ' + time_table_name + '.id)'
+                else:
+                    time_cols = ''
+                    time_join = ''
 
-                    if fk_gid:
-                        geom_cols = ', ' + spatial_table_name + '.*'
-                        geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
-                                    'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
-                    else:
-                        geom_cols = ''
-                        geom_join = ''
+                if fk_gid:
+                    geom_cols = ', ' + spatial_table_name + '.*'
+                    geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
+                                'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
+                else:
+                    geom_cols = ''
+                    geom_join = ''
 
-                    # filter column names already present in spatial table
-                    if spatial_table is not None:
-                        split_spatial_tbl = spatial_table.split('.')
-                        results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
-                        vect_col_names = [e[0] for e in results]
-                        view_col_names = [table_name+'.'+e for e in db_attributes_names if e.lower() not in vect_col_names]
-                        print(vect_col_names, view_col_names)
-                    else:
-                        view_col_names = [table_name+'.'+e for e in db_attributes_names]
+				# filter column names already present in spatial table
+                split_spatial_tbl = spatial_table.split('.')
+                results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
+                vect_col_names = [e[0] for e in results]
+                view_col_names = [e for e in db_attributes_names if e.lower() not in vect_col_names]
+                print(vect_col_names, view_col_names)
+                query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
+                        'AS SELECT ' + ', '.join(view_col_names) + time_cols + geom_cols + ' ' + \
+                        'FROM ' + stat_schema + '.' + table_name + \
+                        time_join + geom_join + \
+                        ';'
 
-                    query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
-                            'AS SELECT ' + ', '.join(view_col_names) + time_cols + geom_cols + ' ' + \
-                            'FROM ' + stat_schema + '.' + table_name + \
-                            time_join + geom_join + \
-                            ';'
+                # add to database
+                db.query(commit=True, query=query)
 
-                    # add to database
-                    db.query(commit=True, query=query)
+                # add to geoserver
+                log_print_step("Add to Geoserver")
+                workspace = 'hotmaps'
+                store = 'hotmapsdb'
+                layer_name = table_name + '_view'
 
-                    # add to geoserver
-                    log_print_step("Add to Geoserver")
-                    workspace = 'hotmaps'
-                    store = 'hotmapsdb'
-                    layer_name = table_name + '_view'
+                # remove previous layer from geoserver
+                # remove layer
+                response = requests.delete(
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                    auth=(GEO_user, GEO_password),
+                )
+                print(response, response.content)
 
-                    # remove previous layer from geoserver
-                    # remove layer
-                    response = requests.delete(
-                        GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
-                        auth=(GEO_user, GEO_password),
-                    )
-                    print(response, response.content)
+                # remove feature type
+                response = requests.delete(
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                    auth=(GEO_user, GEO_password),
+                )
+                print(response, response.content)
 
-                    # remove feature type
-                    response = requests.delete(
-                        GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
-                        auth=(GEO_user, GEO_password),
-                    )
-                    print(response, response.content)
+                # create layer
+                headers = {
+                    'Content-type': 'text/xml',
+                }
+                data = '<featureType>' \
+                       + '<name>' + layer_name + '</name>' \
+                       + '<title>' + layer_name + '</title>' \
+                       + '</featureType>'
 
-                    # create layer
-                    headers = {
-                        'Content-type': 'text/xml',
-                    }
-                    data = '<featureType>' \
-                           + '<name>' + layer_name + '</name>' \
-                           + '<title>' + layer_name + '</title>' \
-                           + '</featureType>'
+                response = requests.post(
+                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                    headers=headers,
+                    data=data,
+                    auth=(GEO_user, GEO_password),
+                )
+                print(data)
+                print(response, response.content)
 
-                    response = requests.post(
-                        GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
-                        headers=headers,
-                        data=data,
-                        auth=(GEO_user, GEO_password),
-                    )
-                    print(data)
-                    print(response, response.content)
-
-                    # special case for industrial sites database
-                    print(repository_name, r['name'])
-                    name = r['name']
-                    views_schema = 'public' # set to "public" to match the mess in DB (should be "geo" like every other geo-related tables)
-                    # views_schema = geo_schema
-                    if repository_name == 'industrial_sites_Industrial_Database' and name == 'Industrial_Database':
-                        print('Industrial_Database repository. Adding custom views (Database) and layers (Geoserver).')
-                        value_fields = {}
-                        value_fields['industrial_database_excess_heat'] = ['id', 'siteid', 'companyname', 'sitename', 'address', 'citycode', 'city', 'country', 'geom',
-                                                       'excess_heat_100-200c', 'excess_heat_200-500c', 'excess_heat_500c', 'excess_heat_total',
-                                                       'excess_heat_100-200c_unit', 'excess_heat_200-500c_unit', 'excess_heat_500c_unit', 'excess_heat_total_unit']
-                        value_fields['industrial_database_subsector'] = ['id', 'geom', 'subsector']
-                        value_fields['industrial_database_emissions'] = ['id', 'siteid', 'companyname', 'address', 'citycode', 'city', 'country', 'geom', 'subsector', 'datasource',
-                                                     'emissions_ets_2014', 'emissions_eprtr_2014', 'emissions_ets_2014_unit', 'emissions_eprtr_2014_unit']
-                        value_fields['industrial_database_compagnyname'] = ['id', 'companyname', 'geom']
-
-                        for table_name, view_col_names in value_fields.items():
-                            log_print_step("Create view for Geoserver")
-                            if fk_time_id:
-                                time_cols = ', ' + time_table_name + '.timestamp'
-                                time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
-                                            'ON (' + name + '.fk_time_id = ' + time_table_name + '.id)'
-                            else:
-                                time_cols = ''
-                                time_join = ''
-
-                            if fk_gid:
-                                geom_cols = ', ' + spatial_table_name + '.*'
-                                geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
-                                            'ON (' + name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
-                            else:
-                                geom_cols = ''
-                                geom_join = ''
-
-                            # filter column names already present in spatial table
-                            # if spatial_table is not None:
-                            #     split_spatial_tbl = spatial_table.split('.')
-                            #     results = db.query(query='SELECT column_name FROM information_schema.columns WHERE table_schema=\'' + split_spatial_tbl[0] + '\' AND table_name=\'' + split_spatial_tbl[1] + '\';')
-                            #     vect_col_names = [e[0] for e in results]
-                            #     view_col_names = [table_name+'.'+e for e in db_attributes_names if e.lower() not in vect_col_names]
-                            #     print(vect_col_names, view_col_names)
-                            # else:
-                            #     view_col_names = [table_name+'.'+e for e in db_attributes_names]
-
-                            query = 'CREATE VIEW ' + views_schema + '.' + table_name + ' ' + \
-                                    'AS SELECT ' + ', '.join(['industrial_database.' + c.replace('-', '_') for c in view_col_names]) + time_cols + geom_cols + ' ' + \
-                                    'FROM ' + stat_schema + '.' + name + \
-                                    time_join + geom_join + \
-                                    ';'
-
-                            # add to database
-                            db.query(commit=True, query=query)
-
-                            add_to_geoserver = False
-
-                            if add_to_geoserver:
-                                # add to geoserver
-                                log_print_step("Add to Geoserver")
-                                workspace = 'hotmaps'
-                                store = 'hotmapsdb'
-                                layer_name = table_name
-
-                                # remove previous layer from geoserver
-                                # remove layer
-                                response = requests.delete(
-                                    GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
-                                    auth=(GEO_user, GEO_password),
-                                )
-                                print(response, response.content)
-
-                                # remove feature type
-                                response = requests.delete(
-                                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
-                                    auth=(GEO_user, GEO_password),
-                                )
-                                print(response, response.content)
-
-                                # create layer
-                                headers = {
-                                    'Content-type': 'text/xml',
-                                }
-                                data = '<featureType>' \
-                                       + '<name>' + layer_name + '</name>' \
-                                       + '<title>' + layer_name + '</title>' \
-                                       + '</featureType>'
-
-                                response = requests.post(
-                                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
-                                    headers=headers,
-                                    data=data,
-                                    auth=(GEO_user, GEO_password),
-                                )
-                                print(data)
-                                print(response, response.content)
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
 
@@ -1579,8 +1319,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
         print(str(e))
         logging.error(traceback.format_exc())
         post_issue(name='Integration failed - repository ' + repository_name,
-                   description='A problem occurred during the integration process of the repository. Please contact the development team.\n' + traceback.format_exc(),
-                   issue_type='Integration script execution')
+                   description='A problem occurred during the integration process of the repository. Please contact the development team.\n' + traceback.format_exc())
 
 db.close_connection()
 log_end_time = time()
