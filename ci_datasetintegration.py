@@ -13,7 +13,7 @@ import logging
 import subprocess
 import csv
 from ci_secrets.secrets import DB_password, DB_database, DB_host, DB_port, DB_user, GIT_base_path, GEO_base_path, \
-    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port, TAIGA_token, GIT_token, SERVER, DEBUG
+    GEO_number_of_pyarmid_levels, GEO_user, GEO_password, GEO_url, GEO_port, GEO_workspace, GEO_db_store, TAIGA_token, GIT_token, SERVER, DEBUG
 from db import db_helper
 import validate_datapackage
 from db.db_helper import str_with_quotes, str_with_single_quotes
@@ -62,23 +62,7 @@ base_path = os.path.dirname(os.path.abspath(__file__))
 # git repositories path
 repositories_base_path = GIT_base_path
 
-# README
-# To test this script localy, run the following script before
-# to start postgis with the same options as DEV/PROD versions
-"""
-#!/bin/bash
-sudo docker kill postgis-databaseprint(
-sudo docker rm postgis-database
 
-sudo docker run \
-        --name=postgis-database \
-        -e POSTGRES_USER=hotmaps \
-        -e POSTGRES_PASSWORD=password \
-        -e POSTGRES_DB=toolboxdb \
-        -e PGDATA=/var/lib/postgresql/data \
-        -p 32768:5432 \
-        -d hotmaps/postgis-database
-"""
 def log_print_step(text):
     print(text)
     log_end_time = time()
@@ -267,10 +251,6 @@ def import_shapefile(src_file, date, attributes_names):
                  )
 
 
-# git pull
-# g = git.cmd.Git(g_dir)
-# g.pull()
-
 # connect to databaselistOfRepositories
 db = db_helper.DB(host=DB_host, port=str(DB_port), database=DB_database, user=DB_user, password=DB_password)
 verbose = False
@@ -281,8 +261,8 @@ db.create_table(table_name='public' + '.' + 'repo', col_names=['name', 'git_id',
 
 # check repository on gitlab
 
-repo_date = datetime.utcnow()-timedelta(days=1)  #permet de récupérer les datasats des 24 dernières heures
-#repo_date = datetime(2010, 1, 1, 0, 0, 0) #permet de récupérer tous les datasets.
+repo_date = datetime.utcnow()-timedelta(days=1)  # allows to retrieve the datasets from past 24h
+#repo_date = datetime(2010, 1, 1, 0, 0, 0) # allows to retrieve datasets.
 dateStr = repo_date.isoformat(sep='T')+'Z'
 gl = gitlab.Gitlab('https://gitlab.com', private_token=GIT_token)
 
@@ -310,6 +290,16 @@ for group in hotmapsGroups:
 
     for project in projects:
         proj = gl.projects.get(id=project.id)
+
+        # check if repo is private or not
+        if proj.visibility != 'public':
+            print('Repository', proj.name, 'is not public. Skipping...')
+            post_issue(name='Visibility issue for ' + proj.name,
+                description='The repository is not public and has been skipped. Please set the repository to public in order to integrate it.',
+                issue_type='Integration script execution')
+
+            continue
+
         commits = proj.commits.list(since=dateStr)
         try:
            if len(commits) == 0:
@@ -363,6 +353,7 @@ for repository_name in listOfRepositories:
 
     # check that repository path is correct
     repo_path = os.path.join(repositories_base_path, repository_name)
+    print(repo_path)
     if not os.path.isdir(repo_path):
         print('repo_path is not a directory')
         msg = 'repository path is not a directory'
@@ -392,15 +383,6 @@ for repository_name in listOfRepositories:
                    description='The repository validation was not successful.\n' + msg,
                    issue_type='Dataset Provider improvement needed')
         continue
-
-    # check datapackage file
-    #is_valid = validate_datapackage.validate_datapackage(dp_file_path)
-    #if is_valid is not True:
-        #print(is_valid)
-        #print(d + ' has been removed')
-        #listOfRepositories.remove(d)
-        #post_issue(name='Validation failed - repository ' + repository_name,
-        #           description='The file "datapackage.json" file does not exist, is in the wrong place or contains a mistake.')
 
     # check properties
     missing_properties = []
@@ -622,6 +604,11 @@ for repository_name in listOfRepositories:
             log_print_step("Start resource")
             format = r['format']
             name = r['name']
+            
+            if name == 'wind_200m' or name == 'wind_100m' or name == 'agricultural_residues' or name == 'livestock_effluents' or name == 'space_heating_cooling_dhw_top-down':
+                print(name, ' ... skipping ...')
+                continue
+
             path = r['path']
             table_name = re.sub('[^A-Za-z0-9]+', '_', name.lower().replace("hotmaps", ""))
             print('table_name =', table_name)
@@ -658,6 +645,8 @@ for repository_name in listOfRepositories:
                     elif col_type == 'integer':
                         col_type = 'bigint'
                     elif col_type == 'double':
+                        col_type = 'numeric(20,2)'
+                    elif col_type == 'number':
                         col_type = 'numeric(20,2)'
                     elif col_type == 'float':
                         col_type = 'numeric(20,2)'
@@ -706,7 +695,7 @@ for repository_name in listOfRepositories:
 
                 # drop table
                 print(geo_schema)
-                db.drop_table(table_name=geo_schema + '.' + table_name)
+                db.drop_table(table_name=geo_schema + '.' + table_name, cascade=True)
                 # create table if not exists
                 db.create_table(table_name=geo_schema + '.' + table_name, col_names=db_attributes_names,
                                 col_types=db_attributes_types, id_col_name='gid')
@@ -717,8 +706,8 @@ for repository_name in listOfRepositories:
 
                 log_print_step("Start geoserver integration")
                 # add to geoserver
-                workspace = 'hotmaps'
-                store = 'hotmapsdb'
+                workspace = GEO_workspace
+                store = GEO_db_store
                 layer_name = table_name
 
                 # remove previous layer from geoserver
@@ -809,11 +798,14 @@ for repository_name in listOfRepositories:
 
                 log_print_step("Start raster integration in database")
                 #cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
-                cmds = 'raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + raster_path + '" ' + rast_tbl + ' | psql'
-                print(cmds)
+                db.drop_table(table_name=rast_tbl, notices=verbose, cascade=True)
+                # create table
+                cmds = 'raster2pgsql -p -s ' + proj + ' -t "auto" -I -C -Y "' + raster_path + '" ' + rast_tbl + ' | psql'
                 subprocess.call(cmds, shell=True)
-
-                # add time relationship in raster table
+                # customize autovacuum settings
+                #db.query(commit=True, notices=verbose, query='ALTER TABLE ' + rast_tbl + ' SET (autovacuum_vacuum_scale_factor = 0.0); ALTER TABLE ' + rast_tbl + ' SET (autovacuum_vacuum_threshold = 5000); ALTER TABLE ' + rast_tbl + ' SET (autovacuum_analyze_scale_factor = 0.0); ALTER TABLE ' + rast_tbl + ' SET (autovacuum_analyze_threshold = 5000);')
+                #db.query(commit=True, notices=verbose, query='ALTER TABLE ' + rast_tbl + ' SET (autovacuum_enabled = false, toast.autovacuum_enabled = false);')
+                # add time column
                 constraints = "ALTER TABLE " + rast_tbl + " " \
                               + "ADD COLUMN IF NOT EXISTS fk_" + time_table_name + "_id bigint; "
                 constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
@@ -824,11 +816,28 @@ for repository_name in listOfRepositories:
                               + "REFERENCES " + time_table + "(id) " \
                               + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
                               + "END IF; END; $$; "
+                db.query(commit=True, notices=verbose, query=constraints)
+                # insert data
+                cmds = 'raster2pgsql -a -s ' + proj + ' -t "auto" -I -C -Y -e "' + raster_path + '" ' + rast_tbl + ' | psql'
+                print(cmds)
+                subprocess.call(cmds, shell=True)
+
+                # add time relationship in raster table
+                #constraints = "ALTER TABLE " + rast_tbl + " " \
+                #              + "ADD COLUMN IF NOT EXISTS fk_" + time_table_name + "_id bigint; "
+                #constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
+                #              + "SELECT 1 FROM pg_constraint WHERE conname = \'" + raster_table_name + "_" + time_table_name + "_id_fkey\') THEN " \
+                #              + "ALTER TABLE " + rast_tbl + " " \
+                #              + "ADD CONSTRAINT " + raster_table_name + "_" + time_table_name + "_id_fkey " \
+                #              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
+                #              + "REFERENCES " + time_table + "(id) " \
+                #              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
+                #              + "END IF; END; $$; "
 
                 fk_time_id = get_or_create_time_id(timestamp=start_date, granularity=temporal_resolution)
                 print('fk_time_id=', fk_time_id)
 
-                query = constraints + "UPDATE " + rast_tbl + " AS r " \
+                query = "UPDATE " + rast_tbl + " AS r " \
                         + "SET fk_" + time_table_name + "_id = " + str(fk_time_id) + " " \
                         + "WHERE fk_" + time_table_name + "_id IS NULL;"
 
@@ -872,15 +881,29 @@ for repository_name in listOfRepositories:
                                 constraints_str=constraints,
                                 notices=verbose)
 
-                query = "SELECT (" \
-                        + "SELECT (ST_SummaryStatsAgg(ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
-                        vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
-                        + "FROM " + rast_tbl + " " \
-                        + "WHERE ST_Intersects(" \
-                        + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
-                        + ") AND fk_" + time_table_name + "_id = " + str(fk_time_id) + " " \
-                        + ").*, " + vect_tbl + ".comm_id, " + str(fk_time_id) + " AS fk_" + time_table_name + "_id," + vect_tbl + ".gid " \
-                        + "FROM " + vect_tbl + " "
+                query = """
+SELECT (
+  SELECT (ST_SummaryStatsAgg(ST_Clip(rast, 1, ST_Transform({vect_tbl}.geom, {raster_SRID}), true), 1, true))
+  FROM (
+    SELECT ST_Union(rast) as rast 
+    FROM (
+      SELECT rast
+      FROM {rast_tbl}
+      WHERE ST_Intersects(
+        {rast_tbl}.rast, ST_Transform({vect_tbl}.geom, {raster_SRID})
+      )
+      AND fk_{time_table_name}_id = {fk_time_id}
+    ) as rast
+  ) as rast
+).*, {vect_tbl}.comm_id, {fk_time_id} AS fk_{time_table_name}_id, {vect_tbl}.gid
+FROM public.lau
+""".format(
+    vect_tbl=vect_tbl,
+    rast_tbl=rast_tbl,
+    raster_SRID=str(raster_SRID),
+    time_table_name=time_table_name,
+    fk_time_id=str(fk_time_id)
+)
 
                 db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
                     + ' (' + ', '.join(
@@ -945,28 +968,6 @@ group by n.gid, n.stat_levl_, lau.fk_{0}_gid, lau.fk_time_id)
     prec_tbl,        # 4
     vect_tbl,        # 5
     )
-                # query = "INSERT INTO " + prec_tbl + " (min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
-                #         + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
-                #         + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.ngid " \
-                #         + "FROM " \
-                #         + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
-                #         + "intr.nuts_id, intr.stat_levl_, intr.fk_" + time_table_name + "_id, intr.ngid " \
-                #         + "FROM " \
-                #         + "(SELECT l.comm_id, l.geom as lgeom, l.gid as lgid, " \
-            	# 		+ "n.nuts_id, n.geom as ngeom, n.gid as ngid, n.stat_levl_, " \
-            	# 		+ "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, " \
-                #         + "data_tbl.mean, data_tbl.fk_" + time_table_name + "_id " \
-                #         + "FROM " + lau_table + " l " \
-                #         + "LEFT JOIN " + vect_tbl + " n ON ST_Intersects(ST_Transform(l.geom, ST_SRID(n.geom)), n.geom) " \
-                #         + "LEFT JOIN " + prec_lau_tbl + " data_tbl ON data_tbl.fk_" + lau_table_name + "_gid = l.gid " \
-                #         + "WHERE n.stat_levl_ = 3 " \
-                #         + "AND n.year = '2013-01-01' " \
-                #         + ") as intr " \
-                #         + "WHERE intr.count IS NOT NULL " \
-                #         + "AND ST_Covers(intr.ngeom, ST_Transform(intr.lgeom, ST_SRID(intr.ngeom))) " \
-                #         + "GROUP BY intr.ngid, intr.nuts_id, intr.ngeom, intr.stat_levl_, intr.fk_" + time_table_name + "_id " \
-                #         + ") as i ); "
-
 
                 db.query(commit=True, notices=verbose, query=query)
 
@@ -1031,14 +1032,14 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 cmds = 'cd ' + os.path.join(repository_path,
                                             'data') + ' ; rm -r ' + pyramid_path + ' ; mkdir ' + pyramid_path + ' ; gdal_retile.py -v -r bilinear ' + \
                        '-levels ' + str(GEO_number_of_pyarmid_levels) + ' ' + \
-                       '-ps 2048 2048 -co "TILED=YES" ' + \
+                       '-ps 2048 2048 -co "TILED=YES" -co "COMPRESS=LZW" ' + \
                        '-targetDir ' + pyramid_path + ' ' + raster_path
                 print(cmds)
                 subprocess.call(cmds, shell=True)
 
                 # add to geoserver
                 log_print_step("Add to geoserver")
-                workspace = 'hotmaps'
+                workspace = GEO_workspace
                 layer_name = raster_table_name
 
                 # remove coverage store from geoserver
@@ -1053,7 +1054,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 }
                 data = '<coverageStore>' \
                        '<name>' + layer_name + '</name>' \
-                       '<workspace>hotmaps</workspace>' \
+                       '<workspace>' + workspace + '</workspace>' \
                        '<enabled>true</enabled>' \
                        '<type>ImagePyramid</type>' \
                        '<url>file:raster-layers/' + layer_name + '</url>' \
@@ -1304,6 +1305,8 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 csv.register_dialect('custom', delimiter=delimiter, doublequote=double_quote) # lineterminator=lineterminator
                 reader = csv.DictReader(f=file, dialect='custom')
 
+                skip_repo = False
+
                 for row in reader:
                     values = []
                     skip = False
@@ -1386,7 +1389,22 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     #values.append(end_date)
                     # if fk_nuts_gid is not None and len(fk_nuts_gid) > 0:
                     #     values.append(fk_nuts_gid[0][0])
-                    db.insert(commit=True, table=stat_schema + '.' + table_name, columns=db_attributes_names, types=db_attributes_types, values=values)
+
+                    try:
+                        db.insert(commit=True, table=stat_schema + '.' + table_name, columns=db_attributes_names, types=db_attributes_types, values=values)
+                    except Exception as e:
+                        msg = 'DB Exception raised during insertion.\n' + str(e)
+                        print(msg)
+                        post_issue(name='Integration of ' + repository_name,
+                                description='The repository integration was not successful.\n' + msg,
+                                issue_type='Dataset Provider improvement needed')
+                        skip_repo = True
+                        break # break row iterations
+
+                if skip_repo:
+                    print('Skipping repository..')
+                    continue
+
                     #db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
                     #    map(str_with_quotes,
                     #        [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
@@ -1432,8 +1450,8 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
 
                     # add to geoserver
                     log_print_step("Add to Geoserver")
-                    workspace = 'hotmaps'
-                    store = 'hotmapsdb'
+                    workspace = GEO_workspace
+                    store = GEO_db_store
                     layer_name = table_name + '_view'
 
                     # remove previous layer from geoserver
@@ -1527,8 +1545,8 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                             if add_to_geoserver:
                                 # add to geoserver
                                 log_print_step("Add to Geoserver")
-                                workspace = 'hotmaps'
-                                store = 'hotmapsdb'
+                                workspace = GEO_workspace
+                                store = GEO_db_store
                                 layer_name = table_name
 
                                 # remove previous layer from geoserver
@@ -1563,6 +1581,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                                 )
                                 print(data)
                                 print(response, response.content)
+
             else:
                 print('Unknown GEO data type, only vector-data-resource/raster-data-resource/tabular-data-resource')
 

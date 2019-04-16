@@ -71,6 +71,7 @@ class DB(object):
 
         except psycopg2.Error as e:
             print(e)
+            self.conn.rollback()
             #self.close_connection()
             raise
 
