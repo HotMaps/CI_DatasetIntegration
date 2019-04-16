@@ -27,25 +27,65 @@ from taiga.exceptions import TaigaException
 
 skip_git = True
 
-#manual_repo_list = ['load_profile_tertiary_shw_yearlong_2010']
-manual_repo_list = ['load_profile_residential_shw_yearlong_2010']
-#manual_repo_list = ['load_profile_residential_heating_yearlong_2010']
-
+manual_repo_list = [
+    #'cool_tot_curr_density',
+    #'heat_tot_curr_density',
+    #'heat_res_curr_density',
+    #'heat_nonres_curr_density',
+    #'gfa_tot_curr_density',
+    #'gfa_res_curr_density',
+    #'gfa_nonres_curr_density',
+    #'vol_tot_curr_density',
+    #'vol_res_curr_density',
+    #'vol_nonres_curr_density',
+    #'pop_tot_curr_density',
+    'potential_forest',
+    'climate_land_surface_temperature',
+    'potential_solar',
+    'climate_solar_radiation',
+    'potential_shallowgeothermal',
+    'CDD_ha_curr',
+    'HDD_ha_curr',
+    'climate_wind_speed',
+    'potential_wind',
+    'HDD_CDD_curr',
+]
 manual_repo_id_list = {}
-#manual_repo_id_list['potential_biomass'] = 4813804
-#manual_repo_id_list['load_profile_tertiary_shw_yearlong_2010'] = 5718445
-manual_repo_id_list['load_profile_residential_shw_yearlong_2010'] = 5718074
-#manual_repo_id_list['load_profile_residential_heating_yearlong_2010'] = 5718036
 
-# manual_repo_id_list['scen_all_scenarios_electr_district_heat_efficiency_total'] = 7813021
-
+#manual_repo_id_list['cool_tot_curr_density'] = 10317348
+#manual_repo_id_list['heat_tot_curr_density'] = 4359132
+#manual_repo_id_list['heat_res_curr_density'] = 5473898
+#manual_repo_id_list['heat_nonres_curr_density'] = 5491001
+#manual_repo_id_list['gfa_tot_curr_density'] = 4359130
+#manual_repo_id_list['gfa_res_curr_density'] = 5491101
+#manual_repo_id_list['gfa_nonres_curr_density'] = 5491264
+#manual_repo_id_list['vol_tot_curr_density'] = 5503175
+#manual_repo_id_list['vol_res_curr_density'] = 5503172
+#manual_repo_id_list['vol_nonres_curr_density'] = 5503165
+#manual_repo_id_list['pop_tot_curr_density'] = 4359136
+manual_repo_id_list['potential_forest'] = 5766083
+manual_repo_id_list['climate_land_surface_temperature'] = 4832439
+manual_repo_id_list['potential_solar'] = 4881518
+manual_repo_id_list['climate_solar_radiation'] = 4832454
+manual_repo_id_list['potential_shallowgeothermal'] = 4881560
+manual_repo_id_list['CDD_ha_curr'] = 5992053
+manual_repo_id_list['HDD_ha_curr'] = 5992042
+manual_repo_id_list['climate_wind_speed'] = 4832432
+manual_repo_id_list['potential_wind'] = 4881468
+manual_repo_id_list['HDD_CDD_curr'] = 5497808
 
 log_start_time = time()
 log_previous_time = log_start_time
 print(strftime("Execution start time: %Y-%m-%d %H:%M:%S +0000", gmtime(log_start_time)))
 
-taiga_api = TaigaAPI(token=TAIGA_token)
-taiga_project = taiga_api.projects.get_by_slug('widmont-hotmaps')
+try:
+    taiga_api = TaigaAPI(token=TAIGA_token)
+    taiga_project = taiga_api.projects.get_by_slug('widmont-hotmaps')
+except:
+    print("Could not connect to Taiga. Token might be outdated")
+    taiga_api = None
+    taiga_project = None
+
 logging.basicConfig(level=logging.INFO)
 
 # schemas
@@ -90,15 +130,16 @@ def post_issue(name, description, issue_type='Dataset integration', tags=[]):
         print(name, description, issue_type, tags.append(SERVER))
         return
     tags.append(SERVER)
-    issue = taiga_project.add_issue(
-        name,
-        taiga_project.priorities.get(name='Workaround possible - Low').id,
-        taiga_project.issue_statuses.get(name='New').id,
-        taiga_project.issue_types.get(name=issue_type).id,
-        taiga_project.severities.get(name='Minor').id,
-        description=description,
-        tags=tags
-    )
+    if taiga_project is not None:
+        issue = taiga_project.add_issue(
+            name,
+            taiga_project.priorities.get(name='Workaround possible - Low').id,
+            taiga_project.issue_statuses.get(name='New').id,
+            taiga_project.issue_types.get(name=issue_type).id,
+            taiga_project.severities.get(name='Minor').id,
+            description=description,
+            tags=tags
+        )
 
 def post_issue_repo(project, name, description):
     issue = project.issues.create({'title': name, 'description': description})
@@ -223,7 +264,7 @@ def update_or_create_repo(repo_name, git_id):
 
     return repo_id
 
-def import_shapefile(src_file, date):
+def import_shapefile(src_file, date, attributes_names):
     # import shp
     # src_file = os.path.join("git-repos", "HotmapsLAU", "data", "HotmapsLAU.shp")
     shapefile = osgeo.ogr.Open(src_file)
@@ -635,6 +676,11 @@ for repository_name in listOfRepositories:
             log_print_step("Start resource")
             format = r['format']
             name = r['name']
+
+            if name == 'wind_200m' or name == 'wind_100m' or name == 'agricultural_residues' or name == 'livestock_effluents' or name == 'space_heating_cooling_dhw_top-down':
+                print(name, ' ... skipping ...')
+                continue
+
             path = r['path']
             table_name = re.sub('[^A-Za-z0-9]+', '_', name.lower().replace("hotmaps", ""))
             print('table_name =', table_name)
@@ -671,6 +717,8 @@ for repository_name in listOfRepositories:
                     elif col_type == 'integer':
                         col_type = 'bigint'
                     elif col_type == 'double':
+                        col_type = 'numeric(20,2)'
+                    elif col_type == 'number':
                         col_type = 'numeric(20,2)'
                     elif col_type == 'float':
                         col_type = 'numeric(20,2)'
@@ -726,7 +774,7 @@ for repository_name in listOfRepositories:
 
                 log_print_step("Start shapefile importation")
                 # import shapefile
-                import_shapefile(os.path.join(repository_path, path), start_date)  # (base_path, 'git-repos', repository_name, path))
+                import_shapefile(os.path.join(repository_path, path), start_date, attributes_names)  # (base_path, 'git-repos', repository_name, path))
 
                 log_print_step("Start geoserver integration")
                 # add to geoserver
@@ -737,14 +785,14 @@ for repository_name in listOfRepositories:
                 # remove previous layer from geoserver
                 # remove layer
                 response = requests.delete(
-                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                    GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
                     auth=(GEO_user, GEO_password),
                 )
                 print(response, response.content)
 
                 # remove feature type
                 response = requests.delete(
-                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
                     auth=(GEO_user, GEO_password),
                 )
                 print(response, response.content)
@@ -760,7 +808,7 @@ for repository_name in listOfRepositories:
                        + '</featureType>'
 
                 response = requests.post(
-                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
                     headers=headers,
                     data=data,
                     auth=(GEO_user, GEO_password),
@@ -822,26 +870,46 @@ for repository_name in listOfRepositories:
 
                 log_print_step("Start raster integration in database")
                 #cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
-                cmds = 'raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + raster_path + '" ' + rast_tbl + ' | psql'
+                db.drop_table(table_name=rast_tbl, notices=verbose, cascade=True)
+                # create table
+                cmds = 'raster2pgsql -p -s ' + proj + ' -t "auto" -I -C -Y "' + raster_path + '" ' + rast_tbl + ' | psql'
+                subprocess.call(cmds, shell=True)
+                # customize autovacuum settings
+                db.query(commit=True, notices=verbose, query='ALTER TABLE ' + rast_tbl + ' SET (autovacuum_vacuum_scale_factor = 0.0); ALTER TABLE ' + rast_tbl + ' SET (autovacuum_vacuum_threshold = 5000); ALTER TABLE ' + rast_tbl + ' SET (autovacuum_analyze_scale_factor = 0.0); ALTER TABLE ' + rast_tbl + ' SET (autovacuum_analyze_threshold = 5000);')
+                db.query(commit=True, notices=verbose, query='ALTER TABLE ' + rast_tbl + ' SET (autovacuum_enabled = false, toast.autovacuum_enabled = false);')
+                # add time column
+                constraints = "ALTER TABLE " + rast_tbl + " " \
+                             + "ADD COLUMN IF NOT EXISTS fk_" + time_table_name + "_id bigint; "
+                constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
+                             + "SELECT 1 FROM pg_constraint WHERE conname = \'" + raster_table_name + "_" + time_table_name + "_id_fkey\') THEN " \
+                             + "ALTER TABLE " + rast_tbl + " " \
+                             + "ADD CONSTRAINT " + raster_table_name + "_" + time_table_name + "_id_fkey " \
+                             + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
+                             + "REFERENCES " + time_table + "(id) " \
+                             + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
+                             + "END IF; END; $$; "
+                db.query(commit=True, notices=verbose, query=constraints)
+                # insert data
+                cmds = 'raster2pgsql -a -s ' + proj + ' -t "auto" -I -C -Y -e "' + raster_path + '" ' + rast_tbl + ' | psql'
                 print(cmds)
                 subprocess.call(cmds, shell=True)
 
                 # add time relationship in raster table
-                constraints = "ALTER TABLE " + rast_tbl + " " \
-                              + "ADD COLUMN IF NOT EXISTS fk_" + time_table_name + "_id bigint; "
-                constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
-                              + "SELECT 1 FROM pg_constraint WHERE conname = \'" + raster_table_name + "_" + time_table_name + "_id_fkey\') THEN " \
-                              + "ALTER TABLE " + rast_tbl + " " \
-                              + "ADD CONSTRAINT " + raster_table_name + "_" + time_table_name + "_id_fkey " \
-                              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
-                              + "REFERENCES " + time_table + "(id) " \
-                              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
-                              + "END IF; END; $$; "
+                #constraints = "ALTER TABLE " + rast_tbl + " " \
+                #              + "ADD COLUMN IF NOT EXISTS fk_" + time_table_name + "_id bigint; "
+                #constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
+                #              + "SELECT 1 FROM pg_constraint WHERE conname = \'" + raster_table_name + "_" + time_table_name + "_id_fkey\') THEN " \
+                #              + "ALTER TABLE " + rast_tbl + " " \
+                #              + "ADD CONSTRAINT " + raster_table_name + "_" + time_table_name + "_id_fkey " \
+                #              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
+                #              + "REFERENCES " + time_table + "(id) " \
+                #              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
+                #              + "END IF; END; $$; "
 
                 fk_time_id = get_or_create_time_id(timestamp=start_date, granularity=temporal_resolution)
                 print('fk_time_id=', fk_time_id)
 
-                query = constraints + "UPDATE " + rast_tbl + " AS r " \
+                query = "UPDATE " + rast_tbl + " AS r " \
                         + "SET fk_" + time_table_name + "_id = " + str(fk_time_id) + " " \
                         + "WHERE fk_" + time_table_name + "_id IS NULL;"
 
@@ -850,7 +918,7 @@ for repository_name in listOfRepositories:
                 # Precompute layers for nuts and lau
                 # LAU
                 log_print_step("Precompute LAU")
-                vect_tbl = "geo." + lau_table_name
+                vect_tbl = lau_table
                 vect_tbl_name = lau_table_name
                 prec_tbl = stat_schema + '.' + precomputed_table_name_lau
                 prec_tbl_name = precomputed_table_name_lau
@@ -885,7 +953,7 @@ for repository_name in listOfRepositories:
                                 constraints_str=constraints,
                                 notices=verbose)
 
-                query = "SELECT (" \
+                '''query = "SELECT (" \
                         + "SELECT (ST_SummaryStatsAgg(ST_Clip(" + rast_tbl + ".rast, 1, ST_Transform(" + \
                         vect_tbl + ".geom, " + raster_SRID + "), true), 1, true)) " \
                         + "FROM " + rast_tbl + " " \
@@ -893,7 +961,31 @@ for repository_name in listOfRepositories:
                         + rast_tbl + ".rast, ST_Transform(" + vect_tbl + ".geom, 3035) " \
                         + ") AND fk_" + time_table_name + "_id = " + str(fk_time_id) + " " \
                         + ").*, " + vect_tbl + ".comm_id, " + str(fk_time_id) + " AS fk_" + time_table_name + "_id," + vect_tbl + ".gid " \
-                        + "FROM " + vect_tbl + " "
+                        + "FROM " + vect_tbl + " "'''
+
+                query = """
+SELECT (
+  SELECT (ST_SummaryStatsAgg(ST_Clip(rast, 1, ST_Transform({vect_tbl}.geom, {raster_SRID}), true), 1, true))
+  FROM (
+    SELECT ST_Union(rast) as rast 
+    FROM (
+      SELECT rast
+      FROM {rast_tbl}
+      WHERE ST_Intersects(
+        {rast_tbl}.rast, ST_Transform({vect_tbl}.geom, {raster_SRID})
+      )
+      AND fk_{time_table_name}_id = {fk_time_id}
+    ) as rast
+  ) as rast
+).*, {vect_tbl}.comm_id, {fk_time_id} AS fk_{time_table_name}_id, {vect_tbl}.gid
+FROM public.lau
+""".format(
+    vect_tbl=vect_tbl,
+    rast_tbl=rast_tbl,
+    raster_SRID=str(raster_SRID),
+    time_table_name=time_table_name,
+    fk_time_id=str(fk_time_id)
+)
 
                 db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
                     + ' (' + ', '.join(
@@ -1044,7 +1136,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 cmds = 'cd ' + os.path.join(repository_path,
                                             'data') + ' ; rm -r ' + pyramid_path + ' ; mkdir ' + pyramid_path + ' ; gdal_retile.py -v -r bilinear ' + \
                        '-levels ' + str(GEO_number_of_pyarmid_levels) + ' ' + \
-                       '-ps 2048 2048 -co "TILED=YES" ' + \
+                       '-ps 2048 2048 -co "TILED=YES" -co "COMPRESS=LZW" ' + \
                        '-targetDir ' + pyramid_path + ' ' + raster_path
                 print(cmds)
                 subprocess.call(cmds, shell=True)
@@ -1056,7 +1148,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
 
                 # remove coverage store from geoserver
                 response = requests.delete(
-                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '?recurse=true',
+                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '?recurse=true',
                     auth=(GEO_user, GEO_password),
                 )
                 print(response, response.content)
@@ -1073,7 +1165,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                        '</coverageStore>'
 
                 response = requests.post(
-                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
+                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores?configure=all',
                     headers=headers,
                     data=data,
                     auth=(GEO_user, GEO_password),
@@ -1089,7 +1181,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                        '</coverage>'
 
                 response = requests.post(
-                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '/coverages',
+                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/coveragestores/' + layer_name + '/coverages',
                     headers=headers,
                     data=data,
                     auth=(GEO_user, GEO_password),
@@ -1452,14 +1544,14 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     # remove previous layer from geoserver
                     # remove layer
                     response = requests.delete(
-                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                        GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
                         auth=(GEO_user, GEO_password),
                     )
                     print(response, response.content)
 
                     # remove feature type
                     response = requests.delete(
-                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                        GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
                         auth=(GEO_user, GEO_password),
                     )
                     print(response, response.content)
@@ -1474,7 +1566,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                            + '</featureType>'
 
                     response = requests.post(
-                        'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                        GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
                         headers=headers,
                         data=data,
                         auth=(GEO_user, GEO_password),
@@ -1547,14 +1639,14 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                                 # remove previous layer from geoserver
                                 # remove layer
                                 response = requests.delete(
-                                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
+                                    GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + layer_name,
                                     auth=(GEO_user, GEO_password),
                                 )
                                 print(response, response.content)
 
                                 # remove feature type
                                 response = requests.delete(
-                                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
+                                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/' + layer_name,
                                     auth=(GEO_user, GEO_password),
                                 )
                                 print(response, response.content)
@@ -1569,7 +1661,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                                        + '</featureType>'
 
                                 response = requests.post(
-                                    'http://' + GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
+                                    GEO_url + ':' + GEO_port + '/geoserver/rest/workspaces/' + workspace + '/datastores/' + store + '/featuretypes/',
                                     headers=headers,
                                     data=data,
                                     auth=(GEO_user, GEO_password),
