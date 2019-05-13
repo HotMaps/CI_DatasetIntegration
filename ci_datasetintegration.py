@@ -131,7 +131,7 @@ def get_or_create_time_id(timestamp, granularity):
     except ValueError:
         raise
 
-    if date is not None:
+    if d is not None:
         t = datetime.strftime(d, '%Y/%m/%d %H:%M:%S')
 
     fk_time_id = db.query(commit=True,
@@ -659,8 +659,11 @@ for repository_name in listOfRepositories:
                     elif col_type == 'timestamp':
                         col_type = 'timestamp'
                     else:
-                        print('Unhandled table type ', col_type)
-                        break
+                        print('Unhandled table type', col_type)
+                        post_issue(name='Integration warning - repository ' + repository_name,
+                            description=col_type + ' column type not supported.\n',
+                            issue_type='Data Provider improvement needed', tags=tags)
+                        continue
 
                     attributes_names.append(att['name'])
                     attributes_types.append(col_type)
@@ -1154,21 +1157,24 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                         col_type = 'boolean'
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'date':
-                        col_type = 'varchar(255)'
+                        col_type = 'date'
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'datetime':
-                        col_type = 'varchar(255)'
+                        col_type = 'timestamp'
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'timestamp':
-                        col_type = 'varchar(255)'
+                        col_type = 'timestamp'
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
                     elif col_type == 'geom' or col_type == 'geometry':
                         col_type = 'geometry'
                         count_geom_cols = count_geom_cols + 1
                         att['unit'] = '' # prevent error if user set unit on geometry reference column
                     else:
-                        print('Unhandled table type ', col_type)
-                        break
+                        print('Unhandled table type', col_type)
+                        post_issue(name='Integration warning - repository ' + repository_name,
+                            description=col_type + ' column type not supported.\n',
+                            issue_type='Data Provider improvement needed', tags=tags)
+                        continue
 
                     col_name = re.sub('[^A-Za-z0-9]+', '_', att['name'].lower()) # prevent unwanted chars
                     while col_name in attributes_names: # append '_1' if duplicate
