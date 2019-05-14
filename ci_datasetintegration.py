@@ -662,7 +662,7 @@ for repository_name in listOfRepositories:
                         print('Unhandled table type', col_type)
                         post_issue(name='Integration warning - repository ' + repository_name,
                             description=col_type + ' column type not supported.\n',
-                            issue_type='Data Provider improvement needed', tags=tags)
+                            issue_type='Dataset Provider improvement needed', tags=tags)
                         continue
 
                     attributes_names.append(att['name'])
@@ -1173,7 +1173,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                         print('Unhandled table type', col_type)
                         post_issue(name='Integration warning - repository ' + repository_name,
                             description=col_type + ' column type not supported.\n',
-                            issue_type='Data Provider improvement needed', tags=tags)
+                            issue_type='Dataset Provider improvement needed', tags=tags)
                         continue
 
                     col_name = re.sub('[^A-Za-z0-9]+', '_', att['name'].lower()) # prevent unwanted chars
@@ -1327,7 +1327,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                             print(name, ' attribute does not match a column name ', row)
                             post_issue(name='Integration failed - repository ' + repository_name,
                                        description=name + ' attribute does not match a column name ' + row + '\n' + traceback.format_exc(),
-                                       issue_type='Data Provider improvement needed', tags=tags)
+                                       issue_type='Dataset Provider improvement needed', tags=tags)
                             continue
 
                         # check type
