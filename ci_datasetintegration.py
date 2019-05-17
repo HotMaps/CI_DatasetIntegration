@@ -302,27 +302,31 @@ for group in hotmapsGroups:
 
         commits = proj.commits.list(since=dateStr)
         try:
-           if len(commits) == 0:
-               print('No recent commit for repository ' + proj.name)
-           else:
-               repository_name = proj.name
-               repository_path = os.path.join(repositories_base_path, repository_name)
-               listOfRepositories.append(proj.name)
-               listOfRepoIds[proj.name] = proj.id
-               print('New commit found for repository ' + repository_name)
+            if len(commits) == 0:
+                print('No recent commit for repository ' + proj.name)
+            else:
+                repository_name = proj.name
+                repository_path = os.path.join(repositories_base_path, repository_name)
+                listOfRepositories.append(proj.name)
+                listOfRepoIds[proj.name] = proj.id
+                print('New commit found for repository ' + repository_name)
 
-               if os.path.exists(repository_path):
-                   # git pull
-                   print('update repository')
-                   g = git.cmd.Git(repository_path)
-                   g.pull()
-                   print('successfuly updated repository')
-               else:
-                   # git clone
-                   print('clone repository')
-                   url = proj.http_url_to_repo
-                   Repo.clone_from(url, repository_path)
-                   print('successfuly cloned repository')
+                if os.path.exists(repository_path):
+                    # git reset & pull
+                    print('update repository')
+                    repo = Repo(repository_path)
+                    for remote in repo.remotes:
+                        remote.fetch()
+                    repo.git.reset('--hard')
+                    repo.git.clean('-xdf')
+                    repo.remotes.origin.pull()
+                    print('successfuly updated repository')
+                else:
+                    # git clone
+                    print('clone repository')
+                    url = proj.http_url_to_repo
+                    Repo.clone_from(url, repository_path)
+                    print('successfuly cloned repository')
         except (GitlabAuthenticationError, GitlabConnectionError, GitlabHttpError) as e:
             print('Error while updating repository ' + proj.name + ' (#' + str(proj.id) + ')')
             post_issue(name='Gitlab error for repository ' + repository_name,
