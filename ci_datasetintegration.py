@@ -307,18 +307,17 @@ for group in hotmapsGroups:
             else:
                 repository_name = proj.name
                 repository_path = os.path.join(repositories_base_path, repository_name)
-                listOfRepositories.append(proj.name)
-                listOfRepoIds[proj.name] = proj.id
                 print('New commit found for repository ' + repository_name)
 
                 if os.path.exists(repository_path):
                     # git reset & pull
                     print('update repository')
                     repo = Repo(repository_path)
+                    # fetch all
                     for remote in repo.remotes:
                         remote.fetch()
-                    repo.git.reset('--hard')
-                    repo.git.clean('-xdf')
+                    repo.git.reset('--hard','origin/master')  # force pull from origin without keeping any changes (to prevent 'merge' issues)
+                    repo.git.clean('-xdf')  # remove any extra non-tracked files
                     repo.remotes.origin.pull()
                     print('successfuly updated repository')
                 else:
@@ -327,15 +326,19 @@ for group in hotmapsGroups:
                     url = proj.http_url_to_repo
                     Repo.clone_from(url, repository_path)
                     print('successfuly cloned repository')
+
+                # add to list of repositories to process if clone/pull succeeds (only!)
+                listOfRepositories.append(proj.name)
+                listOfRepoIds[proj.name] = proj.id
         except (GitlabAuthenticationError, GitlabConnectionError, GitlabHttpError) as e:
             print('Error while updating repository ' + proj.name + ' (#' + str(proj.id) + ')')
             post_issue(name='Gitlab error for repository ' + repository_name,
-                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: ' + str(e),
+                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: \n' + str(e),
                        issue_type='Integration script execution')
         except Exception as e:
             print('Error while updating repository ' + proj.name + ' (#' + str(proj.id) + ')')
             post_issue(name='Script error for repository ' + repository_name,
-                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: ' + str(e),
+                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: \n' + str(e),
                        issue_type='Integration script execution')
 
 try:
