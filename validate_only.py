@@ -24,6 +24,7 @@ from time import time, strftime, gmtime
 from taiga import TaigaAPI
 from taiga.exceptions import TaigaException
 
+# TODO check this file before using because it might not be finished
 
 log_start_time = time()
 log_previous_time = log_start_time

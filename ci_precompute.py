@@ -14,6 +14,8 @@ import datetime
 from rasterstats import zonal_stats, point_query
 from .ci_secrets import secrets
 
+# TODO check this file before using because it might not be finished
+
 # schemas
 stat_schema = 'public'  # 'stat' on production/dev database
 geo_schema = 'public'  # 'geo' on production/dev database

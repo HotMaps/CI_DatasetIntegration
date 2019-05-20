@@ -20,6 +20,8 @@ import requests
 import gitlab
 import logging
 
+# TODO check this file before using because it might not be finished
+
 logging.basicConfig(level=logging.INFO)
 
 # schemas

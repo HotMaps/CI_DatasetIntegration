@@ -5,6 +5,7 @@ from pprint import pprint
 import os.path
 import jsonschema
 
+# TODO check this file before using because it might not be finished
 
 print_with_color = False
 class bcolors:
