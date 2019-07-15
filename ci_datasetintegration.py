@@ -24,6 +24,7 @@ import logging
 from time import time, strftime, gmtime
 from taiga import TaigaAPI
 from taiga.exceptions import TaigaException
+from config import STAT_SCHEMA, GEO_SCHEMA, LAU_TABLE, LAU_TABLE_NAME, NUTS_TABLE, NUTS_TABLE_NAME, VECTOR_SRID, RASTER_SRID, TIME_TABLE, TIME_TABLE_NAME
 
 
 log_start_time = time()
@@ -40,21 +41,6 @@ except:
 
 logging.basicConfig(level=logging.INFO)
 
-# schemas
-stat_schema = 'stat'  # 'stat' on production/dev database
-geo_schema = 'geo'  # 'geo' on production/dev database
-
-# geo tables
-lau_table_name = 'lau'
-lau_table = 'public' + '.' + lau_table_name # change to geo_schema when lau table has been moved in db
-nuts_table_name = 'nuts'
-nuts_table = geo_schema + '.' + nuts_table_name
-vector_SRID = "3035"
-raster_SRID = "3035"
-
-# time tables
-time_table_name = 'time'
-time_table = stat_schema + '.' + time_table_name
 
 # current path
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -180,7 +166,7 @@ def get_or_create_time_id(timestamp, granularity):
         time_attributes.append(granularity)
 
         fk_time_id = db.query(commit=True,
-                 query='INSERT INTO ' + time_table +
+                 query='INSERT INTO ' + TIME_TABLE +
                        ' (timestamp, year, month, day, weekday, season, hour_of_day, hour_of_year, date, granularity) ' +
                        'VALUES (' + ', '.join(map(str_with_single_quotes, time_attributes)) + ') RETURNING id')
 
@@ -241,7 +227,7 @@ def import_shapefile(src_file, date, attributes_names):
         values.append(date)
 
         db.query(commit=True,
-                 query='INSERT INTO ' + geo_schema + '.' + table_name
+                 query='INSERT INTO ' + GEO_SCHEMA + '.' + table_name
                        + ' (' + ', '.join(
                      map(db_helper.str_with_quotes, [x.lower() for x in db_attributes_names])) + ')'
                        + ' VALUES ('
@@ -270,76 +256,108 @@ hotmapsGroups = []
 listOfRepositories = []
 listOfRepoIds = {}
 
-allGroups = gl.groups.list()
+if len(sys.argv) > 0:
+    # manual pull
+    for arg in sys.argv[1:]:
+        print(arg)
+        p = gl.search('projects', arg)
+        if len(p) > 0:
+            proj = gl.projects.get(p[0]['id'])
 
-group = gl.groups.get('1354895')
-hotmapsGroups.append(group)
-#print('gitlab group #' + group.id)
-
-subgroups = group.subgroups.list()
-
-log_print_step("Clone/Update repositories")
-
-# Add all subgroups in the groups list as groups
-for subgroup in subgroups:
-    hotmapsGroups.append(gl.groups.get(subgroup.id, lazy=True))
-
-for group in hotmapsGroups:
-    projects = group.projects.list(all=True)
-    print(projects)
-
-    for project in projects:
-        proj = gl.projects.get(id=project.id)
-
-        # check if repo is private or not
-        if proj.visibility != 'public':
-            print('Repository', proj.name, 'is not public. Skipping...')
-            post_issue(name='Visibility issue for ' + proj.name,
-                description='The repository is not public and has been skipped. Please set the repository to public in order to integrate it.',
-                issue_type='Integration script execution')
-
-            continue
-
-        commits = proj.commits.list(since=dateStr)
-        try:
-            if len(commits) == 0:
-                print('No recent commit for repository ' + proj.name)
+            print(proj.name, proj.id)
+            repository_name = proj.name
+            repository_path = os.path.join(repositories_base_path, repository_name)
+            if os.path.exists(repository_path):
+                # git pull
+                print('update repository')
+                repo = Repo(repository_path)
+                repo.git.execute(["git", "lfs", "pull"]) # force pull lfs files
+                print('successfuly updated repository')
             else:
-                repository_name = proj.name
-                repository_path = os.path.join(repositories_base_path, repository_name)
-                print('New commit found for repository ' + repository_name)
+                # git clone
+                print('clone repository')
+                url = proj.http_url_to_repo
+                repo = Repo.clone_from(url, repository_path)
+                repo.git.execute(["git", "lfs", "pull"]) # force pull lfs files
+                print('successfuly cloned repository')
 
-                if os.path.exists(repository_path):
-                    # git reset & pull
-                    print('update repository')
-                    repo = Repo(repository_path)
-                    # fetch all
-                    for remote in repo.remotes:
-                        remote.fetch()
-                    repo.git.reset('--hard','origin/master')  # force pull from origin without keeping any changes (to prevent 'merge' issues)
-                    repo.git.clean('-xdf')  # remove any extra non-tracked files
-                    repo.remotes.origin.pull()
-                    print('successfuly updated repository')
+            # add to list of repositories to process if clone/pull succeeds (only!)
+            listOfRepositories.append(proj.name)
+            listOfRepoIds[proj.name] = proj.id
+        else:
+            print('repository not found')
+else :
+    # automatic pull/clone
+    allGroups = gl.groups.list()
+
+    group = gl.groups.get('1354895')
+    hotmapsGroups.append(group)
+    #print('gitlab group #' + group.id)
+
+    subgroups = group.subgroups.list()
+
+    log_print_step("Clone/Update repositories")
+
+    # Add all subgroups in the groups list as groups
+    for subgroup in subgroups:
+        hotmapsGroups.append(gl.groups.get(subgroup.id, lazy=True))
+
+    for group in hotmapsGroups:
+        projects = group.projects.list(all=True)
+        print(projects)
+
+        for project in projects:
+            proj = gl.projects.get(id=project.id)
+
+            # check if repo is private or not
+            if proj.visibility != 'public':
+                print('Repository', proj.name, 'is not public. Skipping...')
+                post_issue(name='Visibility issue for ' + proj.name,
+                    description='The repository is not public and has been skipped. Please set the repository to public in order to integrate it.',
+                    issue_type='Integration script execution')
+
+                continue
+
+            commits = proj.commits.list(since=dateStr)
+            try:
+                if len(commits) == 0:
+                    print('No recent commit for repository ' + proj.name)
                 else:
-                    # git clone
-                    print('clone repository')
-                    url = proj.http_url_to_repo
-                    Repo.clone_from(url, repository_path)
-                    print('successfuly cloned repository')
+                    repository_name = proj.name
+                    repository_path = os.path.join(repositories_base_path, repository_name)
+                    print('New commit found for repository ' + repository_name)
 
-                # add to list of repositories to process if clone/pull succeeds (only!)
-                listOfRepositories.append(proj.name)
-                listOfRepoIds[proj.name] = proj.id
-        except (GitlabAuthenticationError, GitlabConnectionError, GitlabHttpError) as e:
-            print('Error while updating repository ' + proj.name + ' (#' + str(proj.id) + ')')
-            post_issue(name='Gitlab error for repository ' + repository_name,
-                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: \n' + str(e),
-                       issue_type='Integration script execution')
-        except Exception as e:
-            print('Error while updating repository ' + proj.name + ' (#' + str(proj.id) + ')')
-            post_issue(name='Script error for repository ' + repository_name,
-                       description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: \n' + str(e),
-                       issue_type='Integration script execution')
+                    if os.path.exists(repository_path):
+                        # git reset & pull
+                        print('update repository')
+                        repo = Repo(repository_path)
+                        # fetch all
+                        for remote in repo.remotes:
+                            remote.fetch()
+                        repo.git.reset('--hard','origin/master')  # force pull from origin without keeping any changes (to prevent 'merge' issues)
+                        repo.git.clean('-xdf')  # remove any extra non-tracked files
+                        repo.remotes.origin.pull()
+                        print('successfuly updated repository')
+                    else:
+                        # git clone
+                        print('clone repository')
+                        url = proj.http_url_to_repo
+                        Repo.clone_from(url, repository_path)
+                        print('successfuly cloned repository')
+
+                    # add to list of repositories to process if clone/pull succeeds (only!)
+                    listOfRepositories.append(proj.name)
+                    listOfRepoIds[proj.name] = proj.id
+            except (GitlabAuthenticationError, GitlabConnectionError, GitlabHttpError) as e:
+                print('Error while updating repository ' + proj.name + ' (#' + str(proj.id) + ')')
+                post_issue(name='Gitlab error for repository ' + repository_name,
+                        description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: \n' + str(e),
+                        issue_type='Integration script execution')
+            except Exception as e:
+                print('Error while updating repository ' + proj.name + ' (#' + str(proj.id) + ')')
+                post_issue(name='Script error for repository ' + repository_name,
+                        description='The integration script encountered an error (' + type(e).__name__ + ') while updating/cloning repositories. More info: \n' + str(e),
+                        issue_type='Integration script execution')
 
 try:
     listOfRepositories.remove('HotmapsLAU')
@@ -349,6 +367,8 @@ try:
     listOfRepositories.remove('.git')
 except:
     pass
+
+
 
 for repository_name in listOfRepositories:
     if repository_name == 'HotmapsLAU' or repository_name == 'lau2' or repository_name == 'NUTS':
@@ -622,8 +642,8 @@ for repository_name in listOfRepositories:
 
             # date = r['date']
             raster_table_name = table_name
-            precomputed_table_name_lau = raster_table_name + "_" + lau_table_name
-            precomputed_table_name_nuts = raster_table_name + "_" + nuts_table_name
+            precomputed_table_name_lau = raster_table_name + "_" + LAU_TABLE_NAME
+            precomputed_table_name_nuts = raster_table_name + "_" + NUTS_TABLE_NAME
 
             if gis_data_type == 'vector-data-resource':
                 vector = r['vector']
@@ -704,10 +724,10 @@ for repository_name in listOfRepositories:
                 db_attributes_types.append('geometry(' + geom_type + ', ' + proj + ')')
 
                 # drop table
-                print(geo_schema)
-                db.drop_table(table_name=geo_schema + '.' + table_name, cascade=True)
+                print(GEO_SCHEMA)
+                db.drop_table(table_name=GEO_SCHEMA + '.' + table_name, cascade=True)
                 # create table if not exists
-                db.create_table(table_name=geo_schema + '.' + table_name, col_names=db_attributes_names,
+                db.create_table(table_name=GEO_SCHEMA + '.' + table_name, col_names=db_attributes_names,
                                 col_types=db_attributes_types, id_col_name='gid')
 
                 log_print_step("Start shapefile importation")
@@ -804,7 +824,7 @@ for repository_name in listOfRepositories:
                 os.environ['PGPASSWORD'] = DB_password
                 os.environ['PGDATABASE'] = DB_database
 
-                rast_tbl = geo_schema + '.' + raster_table_name
+                rast_tbl = GEO_SCHEMA + '.' + raster_table_name
 
                 log_print_step("Start raster integration in database")
                 #cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
@@ -817,13 +837,13 @@ for repository_name in listOfRepositories:
                 #db.query(commit=True, notices=verbose, query='ALTER TABLE ' + rast_tbl + ' SET (autovacuum_enabled = false, toast.autovacuum_enabled = false);')
                 # add time column
                 constraints = "ALTER TABLE " + rast_tbl + " " \
-                              + "ADD COLUMN IF NOT EXISTS fk_" + time_table_name + "_id bigint; "
+                              + "ADD COLUMN IF NOT EXISTS fk_" + TIME_TABLE_NAME + "_id bigint; "
                 constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
-                              + "SELECT 1 FROM pg_constraint WHERE conname = \'" + raster_table_name + "_" + time_table_name + "_id_fkey\') THEN " \
+                              + "SELECT 1 FROM pg_constraint WHERE conname = \'" + raster_table_name + "_" + TIME_TABLE_NAME + "_id_fkey\') THEN " \
                               + "ALTER TABLE " + rast_tbl + " " \
-                              + "ADD CONSTRAINT " + raster_table_name + "_" + time_table_name + "_id_fkey " \
-                              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
-                              + "REFERENCES " + time_table + "(id) " \
+                              + "ADD CONSTRAINT " + raster_table_name + "_" + TIME_TABLE_NAME + "_id_fkey " \
+                              + "FOREIGN KEY (fk_" + TIME_TABLE_NAME + "_id) " \
+                              + "REFERENCES " + TIME_TABLE + "(id) " \
                               + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
                               + "END IF; END; $$; "
                 db.query(commit=True, notices=verbose, query=constraints)
@@ -834,13 +854,13 @@ for repository_name in listOfRepositories:
 
                 # add time relationship in raster table
                 #constraints = "ALTER TABLE " + rast_tbl + " " \
-                #              + "ADD COLUMN IF NOT EXISTS fk_" + time_table_name + "_id bigint; "
+                #              + "ADD COLUMN IF NOT EXISTS fk_" + TIME_TABLE_NAME + "_id bigint; "
                 #constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
-                #              + "SELECT 1 FROM pg_constraint WHERE conname = \'" + raster_table_name + "_" + time_table_name + "_id_fkey\') THEN " \
+                #              + "SELECT 1 FROM pg_constraint WHERE conname = \'" + raster_table_name + "_" + TIME_TABLE_NAME + "_id_fkey\') THEN " \
                 #              + "ALTER TABLE " + rast_tbl + " " \
-                #              + "ADD CONSTRAINT " + raster_table_name + "_" + time_table_name + "_id_fkey " \
-                #              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
-                #              + "REFERENCES " + time_table + "(id) " \
+                #              + "ADD CONSTRAINT " + raster_table_name + "_" + TIME_TABLE_NAME + "_id_fkey " \
+                #              + "FOREIGN KEY (fk_" + TIME_TABLE_NAME + "_id) " \
+                #              + "REFERENCES " + TIME_TABLE + "(id) " \
                 #              + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
                 #              + "END IF; END; $$; "
 
@@ -848,17 +868,17 @@ for repository_name in listOfRepositories:
                 print('fk_time_id=', fk_time_id)
 
                 query = "UPDATE " + rast_tbl + " AS r " \
-                        + "SET fk_" + time_table_name + "_id = " + str(fk_time_id) + " " \
-                        + "WHERE fk_" + time_table_name + "_id IS NULL;"
+                        + "SET fk_" + TIME_TABLE_NAME + "_id = " + str(fk_time_id) + " " \
+                        + "WHERE fk_" + TIME_TABLE_NAME + "_id IS NULL;"
 
                 db.query(commit=True, notices=verbose, query=query)
 
                 # Precompute layers for nuts and lau
                 # LAU
                 log_print_step("Precompute LAU")
-                vect_tbl = lau_table
-                vect_tbl_name = lau_table_name
-                prec_tbl = stat_schema + '.' + precomputed_table_name_lau
+                vect_tbl = LAU_TABLE
+                vect_tbl_name = LAU_TABLE_NAME
+                prec_tbl = STAT_SCHEMA + '.' + precomputed_table_name_lau
                 prec_tbl_name = precomputed_table_name_lau
 
                 db.drop_table(table_name=prec_tbl, notices=verbose, cascade=True)
@@ -866,7 +886,7 @@ for repository_name in listOfRepositories:
                 attributes_names = (
                     'count', 'sum', 'mean', 'stddev', 'min', 'max',
                     'comm_id',
-                    'fk_' + time_table_name + '_id', 'fk_' + vect_tbl_name + '_gid')
+                    'fk_' + TIME_TABLE_NAME + '_id', 'fk_' + vect_tbl_name + '_gid')
                 attributes_types = (
                     'bigint', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)', 'numeric(20,2)',
                     'varchar(255)',
@@ -879,9 +899,9 @@ for repository_name in listOfRepositories:
                               + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION; "
 
                 constraints = constraints + "ALTER TABLE " + prec_tbl + " " \
-                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + time_table_name + "_id_fkey " \
-                              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
-                              + "REFERENCES " + time_table + "(id) " \
+                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + TIME_TABLE_NAME + "_id_fkey " \
+                              + "FOREIGN KEY (fk_" + TIME_TABLE_NAME + "_id) " \
+                              + "REFERENCES " + TIME_TABLE + "(id) " \
                               + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL "
 
 
@@ -893,25 +913,25 @@ for repository_name in listOfRepositories:
 
                 query = """
 SELECT (
-  SELECT (ST_SummaryStatsAgg(ST_Clip(rast, 1, ST_Transform({vect_tbl}.geom, {raster_SRID}), true), 1, true))
+  SELECT (ST_SummaryStatsAgg(ST_Clip(rast, 1, ST_Transform({vect_tbl}.geom, {RASTER_SRID}), true), 1, true))
   FROM (
     SELECT ST_Union(rast) as rast 
     FROM (
       SELECT rast
       FROM {rast_tbl}
       WHERE ST_Intersects(
-        {rast_tbl}.rast, ST_Transform({vect_tbl}.geom, {raster_SRID})
+        {rast_tbl}.rast, ST_Transform({vect_tbl}.geom, {RASTER_SRID})
       )
-      AND fk_{time_table_name}_id = {fk_time_id}
+      AND fk_{TIME_TABLE_NAME}_id = {fk_time_id}
     ) as rast
   ) as rast
-).*, {vect_tbl}.comm_id, {fk_time_id} AS fk_{time_table_name}_id, {vect_tbl}.gid
+).*, {vect_tbl}.comm_id, {fk_time_id} AS fk_{TIME_TABLE_NAME}_id, {vect_tbl}.gid
 FROM public.lau
 """.format(
     vect_tbl=vect_tbl,
     rast_tbl=rast_tbl,
-    raster_SRID=str(raster_SRID),
-    time_table_name=time_table_name,
+    RASTER_SRID=str(RASTER_SRID),
+    TIME_TABLE_NAME=TIME_TABLE_NAME,
     fk_time_id=str(fk_time_id)
 )
 
@@ -924,9 +944,9 @@ FROM public.lau
                 log_print_step("Precompute NUTS 3")
 
                 prec_lau_tbl = prec_tbl
-                vect_tbl = geo_schema + '.' + nuts_table_name
-                prec_tbl = stat_schema + '.' + precomputed_table_name_nuts
-                vect_tbl_name = nuts_table_name
+                vect_tbl = GEO_SCHEMA + '.' + NUTS_TABLE_NAME
+                prec_tbl = STAT_SCHEMA + '.' + precomputed_table_name_nuts
+                vect_tbl_name = NUTS_TABLE_NAME
                 prec_tbl_name = precomputed_table_name_nuts
 
                 db.drop_table(table_name=prec_tbl, notices=verbose, cascade=True)
@@ -934,7 +954,7 @@ FROM public.lau
                 attributes_names = (
                     'min', 'max', 'sum', 'count',
                     'mean', 'nuts_id', 'stat_levl_',
-                    'fk_' + time_table_name + '_id', 'fk_' + vect_tbl_name + '_gid')
+                    'fk_' + TIME_TABLE_NAME + '_id', 'fk_' + vect_tbl_name + '_gid')
 
                 constraints = "ALTER TABLE " + prec_tbl + " " \
                               + "ADD CONSTRAINT " + prec_tbl_name + "_" + vect_tbl_name + "_gid_fkey " \
@@ -943,9 +963,9 @@ FROM public.lau
                               + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; "
 
                 constraints = constraints + "ALTER TABLE " + prec_tbl + " " \
-                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + time_table_name + "_id_fkey " \
-                              + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
-                              + "REFERENCES " + time_table + "(id) " \
+                              + "ADD CONSTRAINT " + prec_tbl_name + "_" + TIME_TABLE_NAME + "_id_fkey " \
+                              + "FOREIGN KEY (fk_" + TIME_TABLE_NAME + "_id) " \
+                              + "REFERENCES " + TIME_TABLE + "(id) " \
                               + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL "
 
                 db.create_table(table_name=prec_tbl,
@@ -972,9 +992,9 @@ group by n.gid, n.stat_levl_, lau.fk_{0}_gid, lau.fk_time_id)
 ;
 """.format(
     vect_tbl_name,   # 0
-    time_table_name, # 1
+    TIME_TABLE_NAME, # 1
     prec_lau_tbl,    # 2
-    lau_table,       # 3
+    LAU_TABLE,       # 3
     prec_tbl,        # 4
     vect_tbl,        # 5
     )
@@ -998,23 +1018,23 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
 ;
 """.format(
     vect_tbl_name,   # 0
-    time_table_name, # 1
+    TIME_TABLE_NAME, # 1
     prec_lau_tbl,    # 2
-    lau_table,       # 3
+    LAU_TABLE,       # 3
     prec_tbl,        # 4
     vect_tbl,        # 5
 )
                 # query = "INSERT INTO " + prec_tbl + " " \
-                #         + "(min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + time_table_name + "_id, fk_" + vect_tbl_name + "_gid) " \
+                #         + "(min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + TIME_TABLE_NAME + "_id, fk_" + vect_tbl_name + "_gid) " \
                 #         + "(SELECT i.min, i.max, i.sum, i.count, i.sum / cast(i.count as numeric(20,2)) as mean, " \
-                #         + "i.nuts_id, i.stat_levl_, i.fk_" + time_table_name + "_id, i.gid " \
+                #         + "i.nuts_id, i.stat_levl_, i.fk_" + TIME_TABLE_NAME + "_id, i.gid " \
                 #         + "FROM " \
                 #         + "(SELECT min(intr.min), max(intr.max), sum(intr.sum), sum(intr.count) as count, " \
-                # 	 	+ "n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id, n.gid " \
+                # 	 	+ "n.nuts_id, n.stat_levl_, intr.fk_" + TIME_TABLE_NAME + "_id, n.gid " \
                 # 		+ "FROM ( " \
                 # 		+ "SELECT data_tbl.nuts_id, data_tbl.fk_" + vect_tbl_name + "_gid, data_tbl.stat_levl_, " \
                 #         + "data_tbl.min, data_tbl.max, data_tbl.sum, data_tbl.count, data_tbl.mean, " \
-                # 		+ "data_tbl.fk_" + time_table_name + "_id " \
+                # 		+ "data_tbl.fk_" + TIME_TABLE_NAME + "_id " \
                 # 		+ "FROM " + prec_tbl + " data_tbl " \
                 # 		+ "WHERE data_tbl.stat_levl_ = 3 " \
                 # 		+ ") as intr " \
@@ -1022,7 +1042,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 # 		+ "WHERE intr.count IS NOT NULL  " \
                 # 	 	+ "AND n.stat_levl_ < 3 " \
                 # 	 	+ "AND n.year = '2013-01-01' " \
-                #         + "GROUP BY n.gid, n.nuts_id, n.stat_levl_, intr.fk_" + time_table_name + "_id " \
+                #         + "GROUP BY n.gid, n.nuts_id, n.stat_levl_, intr.fk_" + TIME_TABLE_NAME + "_id " \
                 # 	    + ") as i " \
                 #         + "); "
 
@@ -1093,6 +1113,17 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     auth=(GEO_user, GEO_password),
                 )
                 # print(data)
+                print(response, response.content)
+
+                # apply style
+                data = '<layer><defaultStyle><name>' + layer_name + '</name></defaultStyle></layer>'
+
+                response = requests.put(
+                    GEO_url + ':' + GEO_port + '/geoserver/rest/layers/' + workspace + ':' + layer_name,
+                    headers=headers,
+                    data=data,
+                    auth=(GEO_user, GEO_password),
+                )
                 print(response, response.content)
 
             elif gis_data_type == 'tabular-data-resource':
@@ -1214,7 +1245,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 # db_attributes_types.append('timestamp')
 
                 log_print_step("Drop current table")
-                db.drop_table(table_name=stat_schema + '.' + table_name, cascade=True)
+                db.drop_table(table_name=STAT_SCHEMA + '.' + table_name, cascade=True)
 
                 # spatial resolution
                 spatial_table = None
@@ -1245,12 +1276,12 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     # continue # turned off to allow the integration of datasets without geometry. uncomment to restrict
                 else:
                     if spatial_resolution and spatial_resolution.lower().startswith("nuts"):
-                        spatial_table_name = nuts_table_name
-                        spatial_table = nuts_table
+                        spatial_table_name = NUTS_TABLE_NAME
+                        spatial_table = NUTS_TABLE
                         spatial_type = 'N'
                     elif spatial_resolution and spatial_resolution.lower().startswith("lau"):
-                        spatial_table_name = lau_table_name
-                        spatial_table = lau_table
+                        spatial_table_name = LAU_TABLE_NAME
+                        spatial_table = LAU_TABLE
                         spatial_type = 'L'
 
                 # temporal resolution
@@ -1282,7 +1313,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     # add spatial relationship in table
                     constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
                                   + "SELECT 1 FROM pg_constraint WHERE conname = \'" + table_name + "_" + spatial_table_name + "_gid_fkey\') THEN " \
-                                  + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
+                                  + "ALTER TABLE " + STAT_SCHEMA + '.' + table_name + " " \
                                   + "ADD CONSTRAINT " + table_name + "_" + spatial_table_name + "_gid_fkey " \
                                   + "FOREIGN KEY (fk_" + spatial_table_name + "_gid) " \
                                   + "REFERENCES " + spatial_table + "(gid) " \
@@ -1295,20 +1326,20 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 if temporal_resolution is not None and len(temporal_resolution) > 0:
                     # add temporal relationship in table
                     constraints = constraints + "DO $$ BEGIN IF NOT EXISTS (" \
-                                  + "SELECT 1 FROM pg_constraint WHERE conname = \'" + table_name + "_" + time_table_name + "_id_fkey\') THEN " \
-                                  + "ALTER TABLE " + stat_schema + '.' + table_name + " " \
-                                  + "ADD CONSTRAINT " + table_name + "_" + time_table_name + "_id_fkey " \
-                                  + "FOREIGN KEY (fk_" + time_table_name + "_id) " \
-                                  + "REFERENCES " + time_table + "(id) " \
+                                  + "SELECT 1 FROM pg_constraint WHERE conname = \'" + table_name + "_" + TIME_TABLE_NAME + "_id_fkey\') THEN " \
+                                  + "ALTER TABLE " + STAT_SCHEMA + '.' + table_name + " " \
+                                  + "ADD CONSTRAINT " + table_name + "_" + TIME_TABLE_NAME + "_id_fkey " \
+                                  + "FOREIGN KEY (fk_" + TIME_TABLE_NAME + "_id) " \
+                                  + "REFERENCES " + TIME_TABLE + "(id) " \
                                   + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
                                   + "END IF; END; $$; "
 
-                    db_attributes_names.append('fk_' + time_table_name + '_id')
+                    db_attributes_names.append('fk_' + TIME_TABLE_NAME + '_id')
                     db_attributes_types.append('bigint')
 
                 # generate table with constraints
                 log_print_step("Generate table")
-                db.create_table(table_name=stat_schema + '.' + table_name, col_names=db_attributes_names,
+                db.create_table(table_name=STAT_SCHEMA + '.' + table_name, col_names=db_attributes_names,
                                 col_types=db_attributes_types, id_col_name='id', constraints_str=constraints)
 
                 log_print_step("Integrate CSV in database")
@@ -1404,7 +1435,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     #     values.append(fk_nuts_gid[0][0])
 
                     try:
-                        db.insert(commit=True, table=stat_schema + '.' + table_name, columns=db_attributes_names, types=db_attributes_types, values=values)
+                        db.insert(commit=True, table=STAT_SCHEMA + '.' + table_name, columns=db_attributes_names, types=db_attributes_types, values=values)
                     except Exception as e:
                         msg = 'DB Exception raised during insertion.\n' + str(e)
                         print(msg)
@@ -1418,7 +1449,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     print('Skipping repository..')
                     continue
 
-                    #db.query(commit=True, query='INSERT INTO ' + stat_schema + '.' + table_name + ' (' + ', '.join(
+                    #db.query(commit=True, query='INSERT INTO ' + STAT_SCHEMA + '.' + table_name + ' (' + ', '.join(
                     #    map(str_with_quotes,
                     #        [x.lower() for x in db_attributes_names])) + ')' + ' VALUES ' + '(' + ', '.join(
                     #    map(str_with_single_quotes, values)) + ')')
@@ -1427,9 +1458,9 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     # create view for Geoserver (if contains geometries / or refs to existing geometries)
                     log_print_step("Create view for Geoserver")
                     if fk_time_id:
-                        time_cols = ', ' + time_table_name + '.timestamp'
-                        time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
-                                    'ON (' + table_name + '.fk_time_id = ' + time_table_name + '.id)'
+                        time_cols = ', ' + TIME_TABLE_NAME + '.timestamp'
+                        time_join = ' LEFT OUTER JOIN ' + TIME_TABLE + ' ' + \
+                                    'ON (' + table_name + '.fk_time_id = ' + TIME_TABLE_NAME + '.id)'
                     else:
                         time_cols = ''
                         time_join = ''
@@ -1452,9 +1483,9 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     else:
                         view_col_names = [table_name+'.'+e for e in db_attributes_names]
 
-                    query = 'CREATE VIEW ' + geo_schema + '.' + table_name + '_view ' + \
+                    query = 'CREATE VIEW ' + GEO_SCHEMA + '.' + table_name + '_view ' + \
                             'AS SELECT ' + ', '.join(view_col_names) + time_cols + geom_cols + ' ' + \
-                            'FROM ' + stat_schema + '.' + table_name + \
+                            'FROM ' + STAT_SCHEMA + '.' + table_name + \
                             time_join + geom_join + \
                             ';'
 
@@ -1504,7 +1535,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                     print(repository_name, r['name'])
                     name = r['name']
                     views_schema = 'public' # set to "public" to match the mess in DB (should be "geo" like every other geo-related tables)
-                    # views_schema = geo_schema
+                    # views_schema = GEO_SCHEMA
                     if repository_name == 'industrial_sites_Industrial_Database' and name == 'Industrial_Database':
                         print('Industrial_Database repository. Adding custom views (Database) and layers (Geoserver).')
                         value_fields = {}
@@ -1519,9 +1550,9 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                         for table_name, view_col_names in value_fields.items():
                             log_print_step("Create view for Geoserver")
                             if fk_time_id:
-                                time_cols = ', ' + time_table_name + '.timestamp'
-                                time_join = ' LEFT OUTER JOIN ' + time_table + ' ' + \
-                                            'ON (' + name + '.fk_time_id = ' + time_table_name + '.id)'
+                                time_cols = ', ' + TIME_TABLE_NAME + '.timestamp'
+                                time_join = ' LEFT OUTER JOIN ' + TIME_TABLE + ' ' + \
+                                            'ON (' + name + '.fk_time_id = ' + TIME_TABLE_NAME + '.id)'
                             else:
                                 time_cols = ''
                                 time_join = ''
@@ -1546,7 +1577,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
 
                             query = 'CREATE VIEW ' + views_schema + '.' + table_name + ' ' + \
                                     'AS SELECT ' + ', '.join(['industrial_database.' + c.replace('-', '_') for c in view_col_names]) + time_cols + geom_cols + ' ' + \
-                                    'FROM ' + stat_schema + '.' + name + \
+                                    'FROM ' + STAT_SCHEMA + '.' + name + \
                                     time_join + geom_join + \
                                     ';'
 
