@@ -256,7 +256,8 @@ hotmapsGroups = []
 listOfRepositories = []
 listOfRepoIds = {}
 
-if len(sys.argv) > 0:
+if len(sys.argv) > 1:
+    log_print_step('Manual integration process')
     # manual pull
     for arg in sys.argv[1:]:
         print(arg)
@@ -287,6 +288,7 @@ if len(sys.argv) > 0:
         else:
             print('repository not found')
 else :
+    log_print_step('Automatic integration process')
     # automatic pull/clone
     allGroups = gl.groups.list()
 

@@ -49,6 +49,7 @@ class DB(object):
                               "password='" + password + "'"
         try:
             self.conn = psycopg2.connect(conn_string)
+            print('connected successfully to database:', database)
         except psycopg2.Error as e:
             print(e)
             self.close_connection()
