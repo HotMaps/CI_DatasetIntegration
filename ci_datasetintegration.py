@@ -330,21 +330,17 @@ else :
                     print('New commit found for repository ' + repository_name)
 
                     if os.path.exists(repository_path):
-                        # git reset & pull
+                        # git pull
                         print('update repository')
                         repo = Repo(repository_path)
-                        # fetch all
-                        for remote in repo.remotes:
-                            remote.fetch()
-                        repo.git.reset('--hard','origin/master')  # force pull from origin without keeping any changes (to prevent 'merge' issues)
-                        repo.git.clean('-xdf')  # remove any extra non-tracked files
-                        repo.remotes.origin.pull()
+                        repo.git.execute(["git", "lfs", "pull"]) # force pull lfs files
                         print('successfuly updated repository')
                     else:
                         # git clone
                         print('clone repository')
                         url = proj.http_url_to_repo
-                        Repo.clone_from(url, repository_path)
+                        repo = Repo.clone_from(url, repository_path)
+                        repo.git.execute(["git", "lfs", "pull"]) # force pull lfs files
                         print('successfuly cloned repository')
 
                     # add to list of repositories to process if clone/pull succeeds (only!)
