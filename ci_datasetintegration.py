@@ -272,6 +272,8 @@ if len(sys.argv) > 1:
                 # git pull
                 print('update repository')
                 repo = Repo(repository_path)
+                repo.git.execute(["git", "fetch", "--all"])
+                repo.git.execute(["git", "reset", "--hard", "origin/master"])
                 repo.git.execute(["git", "lfs", "pull"]) # force pull lfs files
                 print('successfuly updated repository')
             else:
@@ -333,6 +335,8 @@ else :
                         # git pull
                         print('update repository')
                         repo = Repo(repository_path)
+                        repo.git.execute(["git", "fetch", "--all"])
+                        repo.git.execute(["git", "reset", "--hard", "origin/master"])
                         repo.git.execute(["git", "lfs", "pull"]) # force pull lfs files
                         print('successfuly updated repository')
                     else:
@@ -786,6 +790,8 @@ for repository_name in listOfRepositories:
                     end_date = temp['end']
                 except:
                     # keep default data
+                    start_date = '1970-01-01 00:00:00'
+                    end_date = '1970-01-01 00:00:00'
                     pass
 
                 # temporal resolution
