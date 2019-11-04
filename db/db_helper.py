@@ -52,7 +52,7 @@ class DB(object):
             print('connected successfully to database:', database)
         except psycopg2.Error as e:
             print(e)
-            self.close_connection()
+            #self.close_connection()
             raise
 
     def query(self, query, data=None, commit=False, notices=False):
