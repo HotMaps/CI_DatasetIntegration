@@ -365,7 +365,6 @@ try:
     listOfRepositories.remove('HotmapsLAU')
     listOfRepositories.remove('lau2')
     listOfRepositories.remove('NUTS')
-    listOfRepositories.remove('potential_wind')
     listOfRepositories.remove('.git')
 except:
     pass
@@ -634,7 +633,7 @@ for repository_name in listOfRepositories:
             format = r['format']
             name = r['name']
             
-            if name == 'wind_200m' or name == 'wind_100m' or name == 'agricultural_residues' or name == 'livestock_effluents' or name == 'space_heating_cooling_dhw_top-down':
+            if name == 'agricultural_residues' or name == 'livestock_effluents' or name == 'space_heating_cooling_dhw_top-down':
                 print(name, ' ... skipping ...')
                 continue
 
