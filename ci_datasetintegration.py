@@ -261,9 +261,9 @@ if len(sys.argv) > 1:
     # manual pull
     for arg in sys.argv[1:]:
         print(arg)
-        p = gl.search('projects', arg)
+        p = gl.projects.list(search=arg)
         if len(p) > 0:
-            proj = gl.projects.get(p[0]['id'])
+            proj = gl.projects.get(p[0].id)
 
             print(proj.name, proj.id)
             repository_name = proj.name
@@ -1353,6 +1353,8 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 reader = csv.DictReader(f=file, dialect='custom')
 
                 skip_repo = False
+                fk_geom = False
+                fk_time = False
 
                 for row in reader:
                     values = []
@@ -1408,7 +1410,6 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                             fk_time_id = get_or_create_time_id(timestamp=timestamp, granularity=temporal_resolution)
                             print('fk_time_id=', fk_time_id)
 
-
                         if att == '':
                             att = None
                         values.append(att)
@@ -1428,9 +1429,11 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
 
                     if fk_gid:
                         values.append(fk_gid)
+                        fk_geom = True
 
                     if fk_time_id:
                         values.append(fk_time_id)
+                        fk_time = True
 
                     #values.append(start_date)
                     #values.append(end_date)
@@ -1460,7 +1463,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 if missing_geometry is False:
                     # create view for Geoserver (if contains geometries / or refs to existing geometries)
                     log_print_step("Create view for Geoserver")
-                    if fk_time_id:
+                    if fk_time:
                         time_cols = ', ' + TIME_TABLE_NAME + '.timestamp'
                         time_join = ' LEFT OUTER JOIN ' + TIME_TABLE + ' ' + \
                                     'ON (' + table_name + '.fk_time_id = ' + TIME_TABLE_NAME + '.id)'
@@ -1468,7 +1471,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                         time_cols = ''
                         time_join = ''
 
-                    if fk_gid:
+                    if fk_geom:
                         geom_cols = ', ' + spatial_table_name + '.*'
                         geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
                                     'ON (' + table_name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
@@ -1552,7 +1555,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
 
                         for table_name, view_col_names in value_fields.items():
                             log_print_step("Create view for Geoserver")
-                            if fk_time_id:
+                            if fk_time:
                                 time_cols = ', ' + TIME_TABLE_NAME + '.timestamp'
                                 time_join = ' LEFT OUTER JOIN ' + TIME_TABLE + ' ' + \
                                             'ON (' + name + '.fk_time_id = ' + TIME_TABLE_NAME + '.id)'
@@ -1560,7 +1563,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                                 time_cols = ''
                                 time_join = ''
 
-                            if fk_gid:
+                            if fk_geom:
                                 geom_cols = ', ' + spatial_table_name + '.*'
                                 geom_join = ' LEFT OUTER JOIN ' + spatial_table + ' ' + \
                                             'ON (' + name + '.fk_' + spatial_table_name + '_gid = ' + spatial_table_name + '.gid)'
