@@ -202,7 +202,7 @@ def update_or_create_repo(repo_name, git_id):
 
     return repo_id
 
-def import_shapefile(src_file, date, attributes_names):
+def import_shapefile(src_file, date, temporal_resolution, attributes_names):
     # import shp
     # src_file = os.path.join("git-repos", "HotmapsLAU", "data", "HotmapsLAU.shp")
     shapefile = osgeo.ogr.Open(src_file)
@@ -224,7 +224,13 @@ def import_shapefile(src_file, date, attributes_names):
         wkt = geom.ExportToWkt()
 
         # add date from datapackage.json
-        values.append(date)
+        values.append(date) # date col
+        values.append(date) # timestamp col
+
+        # add date foreign key
+        fk_time_id = get_or_create_time_id(timestamp=start_date, granularity=temporal_resolution)
+        print('fk_time_id=', fk_time_id)
+        values.append(fk_time_id)
 
         db.query(commit=True,
                  query='INSERT INTO ' + GEO_SCHEMA + '.' + table_name
@@ -667,6 +673,10 @@ for repository_name in listOfRepositories:
                 attributes_names = []
                 attributes_types = []
                 for att in schema:
+                    # ignore timestamp col because it's used for temporal 
+                    if att['name'].lower() == 'timestamp':
+                        continue
+
                     col_type = att['type']
                     if col_type == 'string':
                         col_type = 'varchar(255)'
@@ -700,11 +710,53 @@ for repository_name in listOfRepositories:
                 db_attributes_names = list(attributes_names)
                 db_attributes_types = list(attributes_types)
 
-                # add date and geometry columns from datapackage.json
+                # add date columns from datapackage.json
                 db_attributes_names.append('date')
                 db_attributes_types.append('date')
-                db_attributes_names.append('geom')
 
+                # temporal resolution
+                temporal_resolution = ''
+                try:
+                    tr = r['temporal_resolution']
+                except:
+                    print('Missing attribute temporal_resolution in datapackage.json. Using year as default')
+                    tr = 'year'
+                if tr.lower().startswith('year'):
+                    temporal_resolution = 'year'
+                elif tr.lower().startswith('month'):
+                    temporal_resolution = 'month'
+                elif tr.lower().startswith('day'):
+                    temporal_resolution = 'day'
+                elif tr.lower().startswith('hour'):
+                    temporal_resolution = 'hour'
+                elif tr.lower().startswith('minute'):
+                    temporal_resolution = 'minute'
+                elif tr.lower().startswith('second'):
+                    temporal_resolution = 'second'
+                elif tr.lower().startswith('quarter'):
+                    temporal_resolution = 'quarter'
+                elif tr.lower().startswith('week'):
+                    temporal_resolution = 'week'
+
+
+                if temporal_resolution is not None and len(temporal_resolution) > 0:
+                    # add temporal relationship in table
+                    constraints = "DO $$ BEGIN IF NOT EXISTS (" \
+                                  + "SELECT 1 FROM pg_constraint WHERE conname = \'" + table_name + "_" + TIME_TABLE_NAME + "_id_fkey\') THEN " \
+                                  + "ALTER TABLE " + GEO_SCHEMA + '.' + table_name + " " \
+                                  + "ADD CONSTRAINT " + table_name + "_" + TIME_TABLE_NAME + "_id_fkey " \
+                                  + "FOREIGN KEY (fk_" + TIME_TABLE_NAME + "_id) " \
+                                  + "REFERENCES " + TIME_TABLE + "(id) " \
+                                  + "MATCH SIMPLE ON UPDATE NO ACTION ON DELETE SET NULL; " \
+                                  + "END IF; END; $$; "
+
+                    db_attributes_names.append('timestamp')
+                    db_attributes_types.append('timestamp')
+                    db_attributes_names.append('fk_' + TIME_TABLE_NAME + '_id')
+                    db_attributes_types.append('bigint')
+
+
+                # add geometry from datapackage.json
                 # convert Polygon type to MultiPolygon
                 if geom_type.lower() == 'polygon':
                     geom_type = 'MultiPolygon'
@@ -721,19 +773,18 @@ for repository_name in listOfRepositories:
                 else:
                     print('geometry_type is not set correctly')
 
-
+                db_attributes_names.append('geom')
                 db_attributes_types.append('geometry(' + geom_type + ', ' + proj + ')')
 
                 # drop table
-                print(GEO_SCHEMA)
                 db.drop_table(table_name=GEO_SCHEMA + '.' + table_name, cascade=True)
                 # create table if not exists
                 db.create_table(table_name=GEO_SCHEMA + '.' + table_name, col_names=db_attributes_names,
-                                col_types=db_attributes_types, id_col_name='gid')
+                                col_types=db_attributes_types, id_col_name='gid', constraints_str=constraints)
 
                 log_print_step("Start shapefile importation")
                 # import shapefile
-                import_shapefile(os.path.join(repository_path, path), start_date, attributes_names)  # (base_path, 'git-repos', repository_name, path))
+                import_shapefile(os.path.join(repository_path, path), start_date, temporal_resolution, attributes_names)  # (base_path, 'git-repos', repository_name, path))
 
                 log_print_step("Start geoserver integration")
                 # add to geoserver
@@ -1025,7 +1076,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
     prec_lau_tbl,    # 2
     LAU_TABLE,       # 3
     prec_tbl,        # 4
-    vect_tbl,        # 5
+    vect_tbl         # 5
 )
                 # query = "INSERT INTO " + prec_tbl + " " \
                 #         + "(min, max, sum, count, mean, nuts_id, stat_levl_, fk_" + TIME_TABLE_NAME + "_id, fk_" + vect_tbl_name + "_gid) " \
