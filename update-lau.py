@@ -37,7 +37,7 @@ def compute(datasetname, srid):
     vect_tbl = LAU_TABLE
     rast_tbl = 'geo.' + datasetname
 
-    query = """
+    precompute_query = """
 WITH agg AS (
     SELECT (
         SELECT (ST_SummaryStatsAgg(ST_Clip(rast, 1, ST_Transform({vect_tbl}.geom, {rast_srid}), true), 1, true))
@@ -48,11 +48,10 @@ WITH agg AS (
                 FROM {rast_tbl}
                 WHERE ST_Intersects({rast_tbl}.rast, ST_Transform({vect_tbl}.geom, {rast_srid}))) as rast
             ) as rast
-        ).*
+        ).*, {vect_tbl}.comm_id, {vect_tbl}.gid
     FROM {vect_tbl}
-    WHERE {vect_tbl}.comm_id = 
-)
-""".format(
+    WHERE {vect_tbl}.comm_id LIKE 'DK%'
+)""".format(
         vect_tbl=vect_tbl,
         rast_tbl=rast_tbl,
         rast_srid=srid
@@ -60,14 +59,16 @@ WITH agg AS (
 
     lau_rast_tbl = 'stat.' + datasetname + '_lau'
     
-    queryUpdate = """
-{subquery}
+    update_query = """{subquery}
 UPDATE {lau_rast_tbl} SET 
 (count, mean, stddev, min, max) =
 (agg.count, agg.mean, agg.stddev, agg.min, agg.max)
-""".format(lau_rast_tbl=lau_rast_tbl, subquery=query)
+FROM agg
+WHERE {lau_rast_tbl}.fk_lau_gid = agg.gid
+;
+""".format(lau_rast_tbl=lau_rast_tbl, subquery=precompute_query)
     
-    print(queryUpdate)
+    print(update_query)
     exit()
                     
     # db.query(commit=True, notices=verbose, query='INSERT INTO ' + prec_tbl
@@ -84,4 +85,5 @@ dataset = []
 with open('dk-lau-update/list_of_datasets.txt', newline='') as csvfile:
     reader = csv.DictReader(csvfile)
     for row in reader:
+        print(row['dataset_name'], row['srid'])
         compute(row['dataset_name'], row['srid'])
