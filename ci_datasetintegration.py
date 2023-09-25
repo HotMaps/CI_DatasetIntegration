@@ -341,16 +341,16 @@ else :
                         # git pull
                         print('update repository')
                         repo = Repo(repository_path)
-                        repo.git.execute(["git", "fetch", "--all"])
-                        repo.git.execute(["git", "reset", "--hard", "origin/master"])
-                        repo.git.execute(["git", "lfs", "pull"]) # force pull lfs files
+                        repo.git.execute(["sudo", "git", "fetch", "--all"])
+                        repo.git.execute(["sudo", "git", "reset", "--hard", "origin/master"])
+                        repo.git.execute(["sudo", "git", "lfs", "pull"]) # force pull lfs files
                         print('successfuly updated repository')
                     else:
                         # git clone
                         print('clone repository')
                         url = proj.http_url_to_repo
                         repo = Repo.clone_from(url, repository_path)
-                        repo.git.execute(["git", "lfs", "pull"]) # force pull lfs files
+                        repo.git.execute(["sudo", "git", "lfs", "pull"]) # force pull lfs files
                         print('successfuly cloned repository')
 
                     # add to list of repositories to process if clone/pull succeeds (only!)
@@ -884,7 +884,7 @@ for repository_name in listOfRepositories:
                 #cmds = 'cd ' + repository_path + '/data ; raster2pgsql -d -s ' + proj + ' -t "auto" -I -C -Y "' + name + '" ' + rast_tbl + ' | psql'
                 db.drop_table(table_name=rast_tbl, notices=verbose, cascade=True)
                 # create table
-                cmds = 'raster2pgsql -p -s ' + proj + ' -t "auto" -I -C -Y "' + raster_path + '" ' + rast_tbl + ' | psql'
+                cmds = 'sudo raster2pgsql -p -s ' + proj + ' -t "auto" -I -C -Y "' + raster_path + '" ' + rast_tbl + ' | psql'
                 subprocess.call(cmds, shell=True)
                 # customize autovacuum settings
                 #db.query(commit=True, notices=verbose, query='ALTER TABLE ' + rast_tbl + ' SET (autovacuum_vacuum_scale_factor = 0.0); ALTER TABLE ' + rast_tbl + ' SET (autovacuum_vacuum_threshold = 5000); ALTER TABLE ' + rast_tbl + ' SET (autovacuum_analyze_scale_factor = 0.0); ALTER TABLE ' + rast_tbl + ' SET (autovacuum_analyze_threshold = 5000);')
@@ -902,7 +902,7 @@ for repository_name in listOfRepositories:
                               + "END IF; END; $$; "
                 db.query(commit=True, notices=verbose, query=constraints)
                 # insert data
-                cmds = 'raster2pgsql -a -s ' + proj + ' -t "auto" -I -C -Y -e "' + raster_path + '" ' + rast_tbl + ' | psql'
+                cmds = 'sudo raster2pgsql -a -s ' + proj + ' -t "auto" -I -C -Y -e "' + raster_path + '" ' + rast_tbl + ' | psql'
                 print(cmds)
                 subprocess.call(cmds, shell=True)
 
@@ -1114,7 +1114,7 @@ group by n.gid, n.stat_levl_, nuts3.fk_{0}_gid, nuts3.fk_{1}_id)
                 # build pyramid using gdal_retile script
                 # todo: could improve by enabling "COMPRESS=JPEG" option, but doing so raised error
                 cmds = 'cd ' + os.path.join(repository_path,
-                                            'data') + ' ; rm -r ' + pyramid_path + ' ; mkdir ' + pyramid_path + ' ; gdal_retile.py -v -r bilinear ' + \
+                                            'data') + ' ; sudo rm -r ' + pyramid_path + ' ; sudo mkdir ' + pyramid_path + ' ; sudo gdal_retile.py -v -r bilinear ' + \
                        '-levels ' + str(GEO_number_of_pyarmid_levels) + ' ' + \
                        '-ps 2048 2048 -co "TILED=YES" -co "COMPRESS=LZW" ' + \
                        '-targetDir ' + pyramid_path + ' ' + raster_path
